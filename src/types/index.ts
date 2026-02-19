@@ -268,3 +268,52 @@ export interface StepConfig {
   pilar: 0 | 1 | 2 | 3;
   pilarName: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTENT GENERATOR SYSTEM (block-by-block AI generation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ContentType = 'vsl' | 'webinar' | 'facebook-ad' | 'youtube-ad' | 'email';
+export type BlockStatus = 'pending' | 'generating' | 'completed' | 'review-needed';
+export type SessionStatus = 'collecting' | 'generating' | 'completed' | 'paused';
+
+export interface StructureBlock {
+  id: string;
+  name: string;
+  objective: string;
+  instructions: string;
+  required_inputs: string[];
+}
+
+export interface ContentStructure {
+  id: string;
+  name: string;
+  type: ContentType;
+  description: string;
+  targetAudiences: string[];
+  blocks: StructureBlock[];
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GeneratedBlock {
+  content: string;
+  status: BlockStatus;
+  generatedAt?: string;
+}
+
+export interface GenerationSession {
+  id: string;
+  structureId: string;
+  collectedInfo: Record<string, string>;
+  generatedBlocks: Record<string, GeneratedBlock>;
+  status: SessionStatus;
+  dnaProfileId?: string;
+  createdAt?: string;
+}
+
+export interface ExtractedField {
+  value: string;
+  confidence: 'high' | 'low' | 'missing';
+}

@@ -5,7 +5,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Folder, Loader2, AlertCircle, CheckCircle, FileText, Eye, Pencil, Trash2, Dna } from 'lucide-react';
+import { Plus, Folder, Loader2, AlertCircle, CheckCircle, FileText, Eye, Pencil, Trash2, Dna, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -121,6 +121,13 @@ export default function DashboardPage() {
               <p className="text-muted-foreground">Gestiona tus proyectos de copy</p>
             </div>
             <div className="flex gap-2">
+              <Button
+                onClick={() => navigate('/content-generator')}
+                className="gap-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90"
+              >
+                <Wand2 className="h-4 w-4" />
+                Generador IA
+              </Button>
               <Button variant="outline" onClick={() => navigate('/dnas')} className="gap-2">
                 <Dna className="h-4 w-4" />
                 DNAs
