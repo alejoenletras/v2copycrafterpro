@@ -1,6 +1,6 @@
 import { useContentGeneratorStore } from '@/store/contentGeneratorStore';
 import StructureSelectionScreen from '@/components/content-generator/StructureSelectionScreen';
-import InfoCollectionScreen from '@/components/content-generator/InfoCollectionScreen';
+import DnaSelectionScreen from '@/components/content-generator/DnaSelectionScreen';
 import BlockGenerationScreen from '@/components/content-generator/BlockGenerationScreen';
 import FinalDocumentScreen from '@/components/content-generator/FinalDocumentScreen';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 const STEPS = [
   { id: 1, label: 'Estructura',  icon: Tv },
-  { id: 2, label: 'Información', icon: FileText },
+  { id: 2, label: 'DNAs', icon: FileText },
   { id: 3, label: 'Generación',  icon: Wand2 },
   { id: 4, label: 'Documento',   icon: CheckCircle2 },
 ] as const;
@@ -59,7 +59,7 @@ export default function ContentGeneratorPage() {
       {/* Content */}
       <div className="max-w-5xl mx-auto px-4 py-10">
         {currentScreen === 1 && <StructureSelectionScreen />}
-        {currentScreen === 2 && <InfoCollectionScreen />}
+        {currentScreen === 2 && <DnaSelectionScreen />}
         {currentScreen === 3 && <BlockGenerationScreen />}
         {currentScreen === 4 && <FinalDocumentScreen />}
       </div>

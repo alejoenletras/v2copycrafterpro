@@ -35,12 +35,43 @@ export interface AutoAnalysis {
 // DNAs de Campana
 export type DNAType = 'expert' | 'audience' | 'product';
 
+// Field-level status for AI-assisted DNA fields
+export type DnaFieldStatus = 'empty' | 'ai_suggested' | 'validated';
+
+// Personality DNA (type: expert) — 4 flat fields
+export interface PersonalityDna {
+  about: string;            // Who you are, your story, your transformation
+  voice: string;            // How you speak: tone, rhythm, adjectives
+  credentials: string;      // Results, certifications, credibility proof
+  forbidden_words: string;  // Words or phrases to NEVER use
+  _status?: Record<string, DnaFieldStatus>;
+}
+
+// Audience DNA (type: audience) — 4 flat fields
+export interface AudienceDna {
+  ideal_client: string;   // Who is the ideal client, their situation
+  core_belief: string;    // The belief/frustration/desire that moves them
+  testimonials: string;   // Real phrases, success stories, social proof
+  keywords: string;       // Key words and phrases this audience uses
+  _status?: Record<string, DnaFieldStatus>;
+}
+
+// Product DNA (type: product) — 4 flat fields
+export interface ProductDna {
+  main_problem: string;         // The specific problem your product solves
+  solution_promise: string;     // The transformation/result you promise
+  irresistible_offer: string;   // Price, bonuses, guarantee, payment plans
+  keywords: string;             // Keywords for SEO and positioning
+  _status?: Record<string, DnaFieldStatus>;
+}
+
 export interface DNA {
   id: string;
   userId: string;
   type: DNAType;
   name: string;
-  data: Record<string, any>;
+  is_default?: boolean;
+  data: PersonalityDna | AudienceDna | ProductDna | Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
 }

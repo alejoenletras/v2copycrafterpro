@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ContentStructure, GenerationSession, GeneratedBlock, BlockStatus, ExtractedField } from '@/types';
+import { ContentStructure, GenerationSession, GeneratedBlock, BlockStatus } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
@@ -23,6 +23,13 @@ async function callEdge(name: string, body: unknown) {
   return res.json();
 }
 
+// Selected DNAs structure (holds the full DNA objects for prompt building)
+interface SelectedDnasState {
+  personality: any | null;  // expert DNA
+  audience: any | null;     // audience DNA
+  product: any | null;      // product DNA
+}
+
 interface ContentGeneratorState {
   // Navigation
   currentScreen: 1 | 2 | 3 | 4;
@@ -31,16 +38,15 @@ interface ContentGeneratorState {
   structures: ContentStructure[];
   selectedStructure: ContentStructure | null;
   session: GenerationSession | null;
-  selectedDnaId: string | null;
+
+  // DNA selection (3 separate DNAs + optional extra context)
+  selectedDnas: SelectedDnasState;
+  extraContext: string;
 
   // Loading states
   isLoadingStructures: boolean;
   isGenerating: boolean;
   generatingBlockId: string | null;
-
-  // Extraction state
-  isExtracting: boolean;
-  extractedFields: Record<string, ExtractedField>;
 
   // Error
   error: string | null;
@@ -48,10 +54,9 @@ interface ContentGeneratorState {
   // Actions
   loadStructures: () => Promise<void>;
   selectStructure: (structure: ContentStructure) => void;
-  setSelectedDna: (dnaId: string | null) => void;
-  startSession: () => Promise<{ success: boolean; error?: string }>;
-  updateCollectedInfo: (key: string, value: string) => void;
-  extractFromDocument: (documentText: string) => Promise<void>;
+  setSelectedDna: (slot: keyof SelectedDnasState, dna: any | null) => void;
+  setExtraContext: (ctx: string) => void;
+  startSessionWithDnas: () => Promise<void>;
   generateBlock: (blockId: string, extraInstructions?: string) => Promise<{ success: boolean; error?: string }>;
   generateAll: () => Promise<void>;
   setCurrentScreen: (screen: 1 | 2 | 3 | 4) => void;
@@ -63,14 +68,57 @@ const initialState = {
   structures: [],
   selectedStructure: null,
   session: null,
-  selectedDnaId: null,
+  selectedDnas: { personality: null, audience: null, product: null },
+  extraContext: '',
   isLoadingStructures: false,
   isGenerating: false,
   generatingBlockId: null,
-  isExtracting: false,
-  extractedFields: {},
   error: null,
 };
+
+// Build the DNA context object to pass to the edge function
+function buildDnaContext(selectedDnas: SelectedDnasState, extraContext: string) {
+  const ctx: Record<string, any> = {};
+
+  if (selectedDnas.personality) {
+    const d = selectedDnas.personality.data ?? {};
+    ctx.personality = {
+      about: d.about ?? '',
+      voice: d.voice ?? '',
+      credentials: d.credentials ?? '',
+      forbidden_words: d.forbidden_words ?? '',
+      name: selectedDnas.personality.name,
+    };
+  }
+
+  if (selectedDnas.audience) {
+    const d = selectedDnas.audience.data ?? {};
+    ctx.audience = {
+      ideal_client: d.ideal_client ?? '',
+      core_belief: d.core_belief ?? '',
+      testimonials: d.testimonials ?? '',
+      keywords: d.keywords ?? '',
+      name: selectedDnas.audience.name,
+    };
+  }
+
+  if (selectedDnas.product) {
+    const d = selectedDnas.product.data ?? {};
+    ctx.product = {
+      main_problem: d.main_problem ?? '',
+      solution_promise: d.solution_promise ?? '',
+      irresistible_offer: d.irresistible_offer ?? '',
+      keywords: d.keywords ?? '',
+      name: selectedDnas.product.name,
+    };
+  }
+
+  if (extraContext?.trim()) {
+    ctx.extra_context = extraContext.trim();
+  }
+
+  return ctx;
+}
 
 export const useContentGeneratorStore = create<ContentGeneratorState>((set, get) => ({
   ...initialState,
@@ -93,29 +141,30 @@ export const useContentGeneratorStore = create<ContentGeneratorState>((set, get)
   },
 
   selectStructure: (structure) => {
-    set({ selectedStructure: structure, session: null, extractedFields: {} });
+    set({ selectedStructure: structure, session: null });
   },
 
-  setSelectedDna: (dnaId) => {
-    set({ selectedDnaId: dnaId });
+  setSelectedDna: (slot, dna) => {
+    set((state) => ({
+      selectedDnas: { ...state.selectedDnas, [slot]: dna },
+    }));
   },
 
-  startSession: async () => {
-    const { selectedStructure, selectedDnaId } = get();
-    if (!selectedStructure) return { success: false, error: 'No hay estructura seleccionada' };
+  setExtraContext: (ctx) => set({ extraContext: ctx }),
+
+  startSessionWithDnas: async () => {
+    const { selectedStructure } = get();
+    if (!selectedStructure) return;
 
     try {
-      const sessionData = {
-        structure_id: selectedStructure.id,
-        dna_profile_id: selectedDnaId || null,
-        collected_info: {},
-        generated_blocks: {},
-        status: 'collecting' as const,
-      };
-
       const { data, error } = await supabase
         .from('generation_sessions')
-        .insert(sessionData)
+        .insert({
+          structure_id: selectedStructure.id,
+          collected_info: {},
+          generated_blocks: {},
+          status: 'generating',
+        })
         .select()
         .single();
 
@@ -124,85 +173,23 @@ export const useContentGeneratorStore = create<ContentGeneratorState>((set, get)
       const session: GenerationSession = {
         id: data.id,
         structureId: data.structure_id,
-        collectedInfo: data.collected_info ?? {},
-        generatedBlocks: data.generated_blocks ?? {},
-        status: data.status,
-        dnaProfileId: data.dna_profile_id ?? undefined,
+        collectedInfo: {},
+        generatedBlocks: {},
+        status: 'generating',
         createdAt: data.created_at,
       };
 
-      set({ session, currentScreen: 2 });
-      return { success: true };
+      set({ session, currentScreen: 3 });
+
+      // Kick off all-block generation immediately
+      get().generateAll();
     } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  },
-
-  updateCollectedInfo: (key, value) => {
-    set((state) => {
-      if (!state.session) return {};
-      const updated: GenerationSession = {
-        ...state.session,
-        collectedInfo: { ...state.session.collectedInfo, [key]: value },
-      };
-      // Persist to DB (fire and forget)
-      supabase
-        .from('generation_sessions')
-        .update({ collected_info: updated.collectedInfo, updated_at: new Date().toISOString() })
-        .eq('id', updated.id);
-      return { session: updated };
-    });
-  },
-
-  extractFromDocument: async (documentText: string) => {
-    const { selectedStructure } = get();
-    if (!selectedStructure) return;
-
-    set({ isExtracting: true, error: null });
-
-    // Collect all required_inputs across all blocks (deduplicated)
-    const allFields = Array.from(
-      new Set(selectedStructure.blocks.flatMap((b) => b.required_inputs))
-    );
-
-    try {
-      const data = await callEdge('extract-document-data', {
-        document_text: documentText,
-        fields_to_extract: allFields,
-      });
-
-      if (data.success) {
-        set({ extractedFields: data.extracted, isExtracting: false });
-        // Auto-fill high-confidence fields
-        const { session } = get();
-        if (session) {
-          const autoFilled: Record<string, string> = {};
-          for (const [field, result] of Object.entries(data.extracted as Record<string, ExtractedField>)) {
-            if (result.confidence === 'high' && result.value) {
-              autoFilled[field] = result.value;
-            }
-          }
-          if (Object.keys(autoFilled).length > 0) {
-            const newInfo = { ...session.collectedInfo, ...autoFilled };
-            set((state) => ({
-              session: state.session ? { ...state.session, collectedInfo: newInfo } : null,
-            }));
-            supabase
-              .from('generation_sessions')
-              .update({ collected_info: newInfo, updated_at: new Date().toISOString() })
-              .eq('id', session.id);
-          }
-        }
-      } else {
-        set({ error: data.error, isExtracting: false });
-      }
-    } catch (err: any) {
-      set({ error: err.message, isExtracting: false });
+      set({ error: err.message });
     }
   },
 
   generateBlock: async (blockId: string, extraInstructions?: string) => {
-    const { session, selectedStructure, selectedDnaId } = get();
+    const { session, selectedStructure, selectedDnas, extraContext } = get();
     if (!session || !selectedStructure) return { success: false, error: 'Sesión no iniciada' };
 
     const block = selectedStructure.blocks.find((b) => b.id === blockId);
@@ -223,24 +210,14 @@ export const useContentGeneratorStore = create<ContentGeneratorState>((set, get)
     }));
 
     try {
-      // Fetch DNA data if selected
-      let dnaData: Record<string, any> | undefined;
-      if (selectedDnaId) {
-        const { data: dna } = await supabase
-          .from('dnas')
-          .select('data, type, name')
-          .eq('id', selectedDnaId)
-          .single();
-        if (dna) dnaData = { ...dna.data, dna_type: dna.type, dna_name: dna.name };
-      }
+      const dnaContext = buildDnaContext(selectedDnas, extraContext);
 
       const result = await callEdge('generate-content-block', {
         session_id: session.id,
         block_id: blockId,
         block_name: block.name,
         block_instructions: block.instructions,
-        collected_info: session.collectedInfo,
-        dna_data: dnaData,
+        dna_context: dnaContext,
         extra_instructions: extraInstructions,
       });
 
@@ -297,16 +274,6 @@ export const useContentGeneratorStore = create<ContentGeneratorState>((set, get)
     if (!selectedStructure || !session) return;
 
     set({ isGenerating: true, error: null });
-
-    // Update session status
-    await supabase
-      .from('generation_sessions')
-      .update({ status: 'generating', updated_at: new Date().toISOString() })
-      .eq('id', session.id);
-
-    set((state) => ({
-      session: state.session ? { ...state.session, status: 'generating' } : null,
-    }));
 
     for (const block of selectedStructure.blocks) {
       await get().generateBlock(block.id);

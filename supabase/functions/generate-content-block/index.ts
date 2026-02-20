@@ -2,15 +2,19 @@
  * generate-content-block edge function
  *
  * Generates a single marketing copy block using Claude AI.
- * Uses the block's instructions from the structure + collected info + optional DNA.
+ * Uses DNA context (personality, audience, product) as the foundation — no manual fields needed.
  *
  * POST body: {
  *   session_id: string,
  *   block_id: string,
  *   block_name: string,
  *   block_instructions: string,
- *   collected_info: Record<string, string>,
- *   dna_data?: Record<string, any>,
+ *   dna_context?: {
+ *     personality?: { about, voice, credentials, forbidden_words, name },
+ *     audience?:    { ideal_client, core_belief, testimonials, keywords, name },
+ *     product?:     { main_problem, solution_promise, irresistible_offer, keywords, name },
+ *     extra_context?: string
+ *   },
  *   extra_instructions?: string   // for regeneration with specific notes
  * }
  */
@@ -42,21 +46,19 @@ serve(async (req) => {
       block_id,
       block_name,
       block_instructions,
-      collected_info,
-      dna_data,
+      dna_context,
       extra_instructions,
     } = await req.json();
 
-    if (!session_id || !block_id || !block_instructions || !collected_info) {
-      return jsonResponse({ success: false, error: "Parámetros requeridos: session_id, block_id, block_instructions, collected_info" }, 400);
+    if (!session_id || !block_id || !block_instructions) {
+      return jsonResponse({ success: false, error: "Parámetros requeridos: session_id, block_id, block_instructions" }, 400);
     }
 
     // Build the prompt
     const prompt = buildBlockPrompt({
       block_name,
       block_instructions,
-      collected_info,
-      dna_data,
+      dna_context,
       extra_instructions,
     });
 
@@ -122,37 +124,70 @@ serve(async (req) => {
 function buildBlockPrompt({
   block_name,
   block_instructions,
-  collected_info,
-  dna_data,
+  dna_context,
   extra_instructions,
 }: {
   block_name: string;
   block_instructions: string;
-  collected_info: Record<string, string>;
-  dna_data?: Record<string, any>;
+  dna_context?: Record<string, any>;
   extra_instructions?: string;
 }): string {
-  const infoLines = Object.entries(collected_info)
-    .filter(([, v]) => v?.trim())
-    .map(([k, v]) => `- ${formatKey(k)}: ${v}`)
-    .join("\n");
+  // Build the DNA sections from the structured context
+  let personalitySection = "";
+  let audienceSection = "";
+  let productSection = "";
+  let extraContextSection = "";
 
-  let dnaSection = "";
-  if (dna_data && Object.keys(dna_data).length > 0) {
-    const dnaLines = Object.entries(dna_data)
-      .filter(([, v]) => v && String(v).trim())
-      .map(([k, v]) => `- ${formatKey(k)}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
-      .join("\n");
-    dnaSection = `
-## DNA DE REFERENCIA (Tono, Estilo y Lenguaje)
-${dnaLines}
-
-IMPORTANTE: Usa el DNA como referencia de tono y estilo. Adapta el lenguaje, las frases características y el nivel de agresividad/directness de acuerdo a este perfil.
-`;
+  if (dna_context?.personality) {
+    const p = dna_context.personality;
+    const lines = [
+      p.about && `  - Quién soy: ${p.about}`,
+      p.voice && `  - Voz/Estilo: ${p.voice}`,
+      p.credentials && `  - Credenciales: ${p.credentials}`,
+      p.forbidden_words && `  - NUNCA usar: ${p.forbidden_words}`,
+    ].filter(Boolean).join("\n");
+    if (lines) {
+      personalitySection = `\n### PERSONALIDAD${p.name ? ` (${p.name})` : ""}\n${lines}\n`;
+    }
   }
 
+  if (dna_context?.audience) {
+    const a = dna_context.audience;
+    const lines = [
+      a.ideal_client && `  - Cliente ideal: ${a.ideal_client}`,
+      a.core_belief && `  - Creencia/frustración central: ${a.core_belief}`,
+      a.testimonials && `  - Prueba social: ${a.testimonials}`,
+      a.keywords && `  - Su lenguaje/keywords: ${a.keywords}`,
+    ].filter(Boolean).join("\n");
+    if (lines) {
+      audienceSection = `\n### AUDIENCIA${a.name ? ` (${a.name})` : ""}\n${lines}\n`;
+    }
+  }
+
+  if (dna_context?.product) {
+    const pr = dna_context.product;
+    const lines = [
+      pr.main_problem && `  - Problema que resuelvo: ${pr.main_problem}`,
+      pr.solution_promise && `  - Promesa de solución: ${pr.solution_promise}`,
+      pr.irresistible_offer && `  - La oferta: ${pr.irresistible_offer}`,
+      pr.keywords && `  - Keywords del producto: ${pr.keywords}`,
+    ].filter(Boolean).join("\n");
+    if (lines) {
+      productSection = `\n### PRODUCTO${pr.name ? ` (${pr.name})` : ""}\n${lines}\n`;
+    }
+  }
+
+  if (dna_context?.extra_context) {
+    extraContextSection = `\n### CONTEXTO ADICIONAL PARA ESTA CAMPAÑA\n  ${dna_context.extra_context}\n`;
+  }
+
+  const hasDna = personalitySection || audienceSection || productSection;
+  const dnaSection = hasDna
+    ? `\n## DNA DE CAMPAÑA (usa esto como contexto de tono, audiencia y producto)${personalitySection}${audienceSection}${productSection}${extraContextSection}\nIMPORTANTE: Usa el DNA para escribir con la VOZ de la Personalidad, PARA la Audiencia descrita, SOBRE el Producto indicado. Adapta lenguaje, ejemplos y emociones al perfil real.\n`
+    : "";
+
   const extraSection = extra_instructions
-    ? `\n## INSTRUCCIONES ADICIONALES DE REGENERACIÓN\n${extra_instructions}\n`
+    ? `\n## INSTRUCCIONES DE REGENERACIÓN\n${extra_instructions}\n`
     : "";
 
   return `Eres un copywriter experto en marketing de alta conversión para el mercado de habla hispana.
@@ -161,14 +196,11 @@ Tu especialidad es crear copy visceral, directo y que vende — sin suavizar el 
 ## PROTOCOLO DE VERACIDAD (OBLIGATORIO)
 - NUNCA inventes datos, resultados, testimonios, estadísticas o características que no estén en la información proporcionada
 - Si necesitas un dato específico que no tienes, escríbelo como [INSERTAR: descripción del dato necesario]
-- Usa SOLO la información real que te doy a continuación
-
-## INFORMACIÓN DEL PRODUCTO Y AUDIENCIA
-${infoLines || "No se proporcionó información adicional."}
+- Usa SOLO la información real del DNA
 ${dnaSection}
 ## BLOQUE A GENERAR: ${block_name}
 
-### Instrucciones específicas para este bloque:
+### Instrucciones específicas:
 ${block_instructions}
 ${extraSection}
 ## FORMATO DE RESPUESTA

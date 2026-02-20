@@ -89,6 +89,81 @@ export function useDNAs(type?: DNAType) {
     },
   });
 
+  const setDefault = useMutation({
+    mutationFn: async ({ id, dnaType }: { id: string; dnaType: DNAType }) => {
+      // Clear current default for this type
+      await supabase
+        .from('dnas')
+        .update({ is_default: false })
+        .eq('type', dnaType)
+        .eq('user_id', 'default-user');
+
+      // Set new default
+      const { data, error } = await supabase
+        .from('dnas')
+        .update({ is_default: true, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dnas'] });
+      toast({ title: 'Predeterminado actualizado' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const unsetDefault = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('dnas')
+        .update({ is_default: false, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dnas'] });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const duplicateDNA = useMutation({
+    mutationFn: async (id: string) => {
+      const source = dnas?.find((d) => d.id === id);
+      if (!source) throw new Error('DNA no encontrado');
+
+      const { data, error } = await supabase
+        .from('dnas')
+        .insert({
+          user_id: 'default-user',
+          type: source.type,
+          name: `${source.name} (copia)`,
+          data: source.data,
+          is_default: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dnas'] });
+      toast({ title: 'DNA duplicado', description: 'Copia creada correctamente' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     dnas,
     isLoading,
@@ -101,5 +176,11 @@ export function useDNAs(type?: DNAType) {
     isUpdating: updateDNA.isPending,
     deleteDNA: deleteDNA.mutate,
     isDeleting: deleteDNA.isPending,
+    setDefault: setDefault.mutate,
+    setDefaultAsync: setDefault.mutateAsync,
+    isSettingDefault: setDefault.isPending,
+    unsetDefault: unsetDefault.mutate,
+    duplicateDNA: duplicateDNA.mutate,
+    isDuplicating: duplicateDNA.isPending,
   };
 }
