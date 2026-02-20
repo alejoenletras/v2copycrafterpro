@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Plus, Home, Loader2, Mic, Users, Package, Star, Copy, Trash2,
-  Pencil, Check, X, Sparkles, ChevronRight, AlertCircle,
+  Pencil, Check, X, Sparkles, ChevronRight, AlertCircle, Brain, Pen,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -15,6 +15,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import type { DNAType, DnaFieldStatus } from '@/types';
+import DnaAutoModePanel from '@/components/dnas/DnaAutoModePanel';
 
 // ─── Field definitions per DNA type ──────────────────────────────────────────
 
@@ -123,6 +124,7 @@ export default function DNAsPage() {
   const { dnas, isLoading, createDNAAsync, updateDNAAsync, deleteDNA, isDeleting, setDefault, unsetDefault, duplicateDNA } = useDNAs();
 
   const [selectedDna, setSelectedDna] = useState<any | null>(null);
+  const [panelMode, setPanelMode] = useState<'manual' | 'auto'>('auto');
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState('');
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -240,7 +242,32 @@ export default function DNAsPage() {
         data: {},
       });
       setSelectedDna(created);
+      setPanelMode('auto'); // New DNAs start in auto mode
     } catch (_) { /* hook shows toast */ }
+  };
+
+  // Called when auto mode finishes extracting fields
+  const handleAutoComplete = async (
+    fields: Record<string, string>,
+    statuses: Record<string, DnaFieldStatus>,
+    suggestedName?: string,
+  ) => {
+    const newData = { ...fields };
+    const newStatus = { ...statuses };
+    setFormData(newData);
+    setFieldStatus(newStatus);
+    setPanelMode('manual'); // Switch to manual for review
+
+    // Update DNA name if a better name is suggested and current name is generic
+    if (suggestedName && selectedDna?.name?.includes('Sin título')) {
+      try {
+        await updateDNAAsync({ id: selectedDna.id, updates: { name: suggestedName } });
+        setSelectedDna((prev: any) => ({ ...prev, name: suggestedName }));
+      } catch (_) { /* ignore name update error */ }
+    }
+
+    // Save fields to DB
+    await saveToDb(newData, newStatus);
   };
 
   const handleRenameConfirm = async () => {
@@ -322,7 +349,7 @@ export default function DNAsPage() {
                     {list.map((dna) => (
                       <button
                         key={dna.id}
-                        onClick={() => setSelectedDna(dna)}
+                        onClick={() => { setSelectedDna(dna); setPanelMode('manual'); }}
                         className={cn(
                           'w-full text-left flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/60',
                           selectedDna?.id === dna.id && 'bg-muted font-medium',
@@ -418,50 +445,88 @@ export default function DNAsPage() {
                 </div>
               </div>
 
-              {/* Legend */}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500" /> Validado</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" /> Sugerencia IA (edita para validar)</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-muted-foreground/30" /> Vacío</span>
-                <span className="flex items-center gap-1.5 ml-auto"><Sparkles className="w-3 h-3 text-violet-500" /> Ícono = generar/mejorar con IA</span>
+              {/* Mode tabs */}
+              <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+                <button
+                  onClick={() => setPanelMode('auto')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                    panelMode === 'auto' ? 'bg-background shadow-sm text-violet-700' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Brain className="w-3.5 h-3.5" /> Desde contenido
+                </button>
+                <button
+                  onClick={() => setPanelMode('manual')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                    panelMode === 'manual' ? 'bg-background shadow-sm text-violet-700' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Pen className="w-3.5 h-3.5" /> Manual
+                </button>
               </div>
 
-              {/* ai_suggested warning if any */}
-              {Object.values(fieldStatus).some(s => s === 'ai_suggested') && (
-                <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  <span>Hay campos con sugerencias de IA (en amarillo). Edítalos y personalízalos para que sean turos — se marcarán en azul automáticamente.</span>
-                </div>
+              {/* AUTO MODE */}
+              {panelMode === 'auto' && (
+                <DnaAutoModePanel
+                  dnaType={selectedDna.type}
+                  dnaName={selectedDna.name}
+                  onComplete={handleAutoComplete}
+                />
               )}
 
-              {/* Fields */}
-              <div className="space-y-5">
-                {(FIELDS[selectedDna.type as DNAType] ?? []).map((field) => (
-                  <DnaField
-                    key={field.key}
-                    fieldDef={field}
-                    value={formData[field.key] ?? ''}
-                    status={fieldStatus[field.key] ?? 'empty'}
-                    isImproving={improvingField === field.key}
-                    onChangeValue={(v) => handleFieldChange(field.key, v)}
-                    onImprove={() => handleImproveField(field.key, field.label)}
-                  />
-                ))}
-              </div>
+              {/* MANUAL MODE */}
+              {panelMode === 'manual' && (
+                <>
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500" /> Validado</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" /> Sugerencia IA (edita para validar)</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-muted-foreground/30" /> Vacío</span>
+                    <span className="flex items-center gap-1.5 ml-auto"><Sparkles className="w-3 h-3 text-violet-500" /> Ícono = generar/mejorar con IA</span>
+                  </div>
 
-              {/* Save button (manual fallback) */}
-              <div className="pt-2 border-t flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">Los cambios se guardan automáticamente.</p>
-                <Button
-                  size="sm"
-                  onClick={() => saveToDb(formData, fieldStatus)}
-                  disabled={isSaving}
-                  className="bg-violet-600 hover:bg-violet-700 text-white"
-                >
-                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Check className="w-3.5 h-3.5 mr-1" />}
-                  Guardar ahora
-                </Button>
-              </div>
+                  {/* ai_suggested warning if any */}
+                  {Object.values(fieldStatus).some(s => s === 'ai_suggested') && (
+                    <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>Hay campos con sugerencias de IA (en amarillo). Edítalos y personalízalos para que sean tuyos — se marcarán en azul automáticamente.</span>
+                    </div>
+                  )}
+
+                  {/* Fields */}
+                  <div className="space-y-5">
+                    {(FIELDS[selectedDna.type as DNAType] ?? []).map((field) => (
+                      <DnaField
+                        key={field.key}
+                        fieldDef={field}
+                        value={formData[field.key] ?? ''}
+                        status={fieldStatus[field.key] ?? 'empty'}
+                        isImproving={improvingField === field.key}
+                        onChangeValue={(v) => handleFieldChange(field.key, v)}
+                        onImprove={() => handleImproveField(field.key, field.label)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Save button (only in manual mode) */}
+              {panelMode === 'manual' && (
+                <div className="pt-2 border-t flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">Los cambios se guardan automáticamente.</p>
+                  <Button
+                    size="sm"
+                    onClick={() => saveToDb(formData, fieldStatus)}
+                    disabled={isSaving}
+                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                  >
+                    {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                    Guardar ahora
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </main>
