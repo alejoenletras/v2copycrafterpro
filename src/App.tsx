@@ -3,12 +3,10 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import WizardPage from "./pages/WizardPage";
 import DashboardPage from "./pages/DashboardPage";
 import DNAsPage from "./pages/DNAsPage";
-import GeneratedCopyPage from "./pages/GeneratedCopyPage";
-import ContentGeneratorPage from "./pages/ContentGeneratorPage";
-import AdminStructuresPage from "./pages/AdminStructuresPage";
+import VslMakerPage from "./pages/VslMakerPage";
+import AdsAgentPage from "./pages/AdsAgentPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,10 +20,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/dnas" element={<DNAsPage />} />
-          <Route path="/wizard" element={<WizardPage />} />
-          <Route path="/copy/:id" element={<GeneratedCopyPage />} />
-          <Route path="/content-generator" element={<ContentGeneratorPage />} />
-          <Route path="/admin/structures" element={<AdminStructuresPage />} />
+          <Route path="/vsl" element={<VslMakerPage />} />
+          <Route path="/ads-agent" element={<AdsAgentPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

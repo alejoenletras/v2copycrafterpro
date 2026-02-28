@@ -1,292 +1,256 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { testConnection, supabase } from '@/lib/supabase';
-import { useProjects } from '@/hooks/useProjects';
+import { testConnection } from '@/lib/supabase';
+import { useDNAs } from '@/hooks/useDNAs';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Folder, Loader2, AlertCircle, CheckCircle, FileText, Eye, Pencil, Trash2, Dna, Wand2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { useWizardStore } from '@/store/wizardStore';
+  Loader2, AlertCircle, CheckCircle, Mic, Users, Package,
+  ArrowRight, Dna, Zap, Sparkles, Bot,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ConnectionStatus {
   success: boolean;
   message: string;
 }
 
+const DNA_TYPES = [
+  {
+    type: 'expert' as const,
+    label: 'Personalidad',
+    description: 'Tu voz, historia y estilo',
+    icon: Mic,
+    color: 'text-violet-600',
+    bg: 'bg-violet-50',
+    border: 'border-violet-200',
+    iconBg: 'bg-violet-100',
+  },
+  {
+    type: 'audience' as const,
+    label: 'Audiencia',
+    description: 'Tu cliente ideal y sus dolores',
+    icon: Users,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    iconBg: 'bg-blue-100',
+  },
+  {
+    type: 'product' as const,
+    label: 'Producto',
+    description: 'Tu oferta y diferenciador',
+    icon: Package,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    iconBg: 'bg-emerald-100',
+  },
+];
+
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { projects, isLoading, error, deleteProject, isDeleting } = useProjects();
-  const { loadProject, resetWizard } = useWizardStore();
+  const { dnas, isLoading: dnasLoading } = useDNAs();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
-  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     testConnection().then(setConnectionStatus);
   }, []);
 
-  const handleViewLastCopy = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('generated_copies')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data) {
-        navigate(`/copy/${data.id}`);
-      } else {
-        toast({
-          title: '📄 Sin copys',
-          description: 'Aún no has generado ningún copy',
-        });
-      }
-    } catch (err: any) {
-      toast({
-        title: '❌ Error',
-        description: err.message,
-        variant: 'destructive',
-      });
-    }
+  // DNA counts
+  const dnaCountByType: Record<string, number> = {
+    expert: dnas?.filter(d => d.type === 'expert').length ?? 0,
+    audience: dnas?.filter(d => d.type === 'audience').length ?? 0,
+    product: dnas?.filter(d => d.type === 'product').length ?? 0,
   };
-
-  const handleProjectClick = (project: any) => {
-    // Check if project has generated copies
-    const generatedCopies = project.generated_copies || [];
-    
-    if (generatedCopies.length > 0) {
-      // Go to the most recent copy
-      const latestCopy = generatedCopies.sort(
-        (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )[0];
-      navigate(`/copy/${latestCopy.id}`);
-    } else {
-      // Go to wizard to edit/complete the project
-      handleEditProject(project.id);
-    }
-  };
-
-  const handleEditProject = async (projectId: string) => {
-    const result = await loadProject(projectId);
-    if (result.success) {
-      navigate('/wizard');
-    } else {
-      toast({
-        title: '❌ Error',
-        description: result.error || 'No se pudo cargar el proyecto',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click
-    setProjectToDelete(projectId);
-  };
-
-  const confirmDelete = () => {
-    if (projectToDelete) {
-      deleteProject(projectToDelete);
-      setProjectToDelete(null);
-    }
-  };
-
-  const handleNewProject = () => {
-    resetWizard();
-    navigate('/wizard');
-  };
+  const hasAllThreeDnaTypes = dnaCountByType.expert > 0 && dnaCountByType.audience > 0 && dnaCountByType.product > 0;
+  const hasAnyDna = (dnas?.length ?? 0) > 0;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground">Gestiona tus proyectos de copy</p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => navigate('/content-generator')}
-                className="gap-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:opacity-90"
-              >
-                <Wand2 className="h-4 w-4" />
-                Generador IA
-              </Button>
-              <Button variant="outline" onClick={() => navigate('/dnas')} className="gap-2">
-                <Dna className="h-4 w-4" />
-                DNAs
-              </Button>
-              <Button variant="outline" onClick={handleViewLastCopy} className="gap-2">
-                <Eye className="h-4 w-4" />
-                Ver último copy
-              </Button>
-              <Button onClick={handleNewProject} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Nuevo Proyecto
-              </Button>
-            </div>
-          </div>
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Zap className="w-6 h-6 text-violet-500" />
+            Hooq
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Crea guiones de venta de alta conversión con IA</p>
         </div>
       </header>
 
-      {/* Connection Status */}
-      {connectionStatus && (
-        <div className="container mx-auto px-4 py-4">
-          <div className={`flex items-center gap-2 p-4 rounded-lg ${
-            connectionStatus.success 
-              ? 'bg-green-500/10 text-green-600 border border-green-500/20' 
-              : 'bg-destructive/10 text-destructive border border-destructive/20'
-          }`}>
-            {connectionStatus.success ? (
-              <CheckCircle className="h-5 w-5" />
-            ) : (
-              <AlertCircle className="h-5 w-5" />
-            )}
+      {/* Connection error */}
+      {connectionStatus && !connectionStatus.success && (
+        <div className="max-w-3xl mx-auto px-4 pt-4">
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive border border-destructive/20 text-sm">
+            <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{connectionStatus.message}</span>
           </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : error ? (
-          <Card className="border-destructive">
-            <CardContent className="py-8 text-center">
-              <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
-              <p className="text-destructive">Error al cargar proyectos</p>
-            </CardContent>
-          </Card>
-        ) : projects && projects.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project: any) => {
-              const hasCopy = project.generated_copies && project.generated_copies.length > 0;
-              
-              return (
-                <Card 
-                  key={project.id} 
-                  className="hover:shadow-xl transition-all cursor-pointer border-2 hover:border-primary/50"
-                  onClick={() => handleProjectClick(project)}
-                >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        {hasCopy ? (
-                          <FileText className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <Folder className="h-5 w-5 text-primary" />
-                        )}
-                        {project.product_info?.name || 'Proyecto sin nombre'}
-                      </CardTitle>
-                      <Badge variant={hasCopy ? "default" : "secondary"}>
-                        {hasCopy ? '✅ Copy generado' : 'Borrador'}
-                      </Badge>
-                    </div>
-                    <CardDescription>
-                      {project.funnel_type?.toUpperCase()} • {project.country}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      Actualizado: {new Date(project.updated_at).toLocaleDateString()}
-                    </p>
-                    {hasCopy && (
-                      <p className="text-xs text-green-600 mt-2">
-                        Click para ver el copy generado →
-                      </p>
-                    )}
-                    {!hasCopy && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Click para continuar editando →
-                      </p>
-                    )}
-                    
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditProject(project.id);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Editar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => handleDeleteProject(project.id, e)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        Eliminar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+      <main className="max-w-3xl mx-auto px-4 py-8 space-y-8 flex-1">
+        {dnasLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <Card className="border-dashed">
-            <CardContent className="py-12 text-center">
-              <Folder className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No hay proyectos</h3>
-              <p className="text-muted-foreground mb-4">
-                Crea tu primer proyecto para comenzar a generar copy persuasivo
-              </p>
-              <Button onClick={handleNewProject} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Crear Proyecto
-              </Button>
-            </CardContent>
-          </Card>
+          <>
+            {/* ── PASO 1: DNAs ─────────────────────────────── */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <span className={cn(
+                  'flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold shrink-0',
+                  hasAllThreeDnaTypes
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-violet-100 text-violet-700',
+                )}>
+                  {hasAllThreeDnaTypes ? <CheckCircle className="w-4 h-4" /> : '1'}
+                </span>
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground">Define tus DNAs</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Los DNAs capturan la esencia de tu marca para que la IA escriba con tu voz.
+                    {!hasAnyDna && <span className="text-violet-600 font-medium"> Empieza aquí.</span>}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {DNA_TYPES.map((dna) => {
+                  const Icon = dna.icon;
+                  const count = dnaCountByType[dna.type];
+                  const hasThis = count > 0;
+                  return (
+                    <button
+                      key={dna.type}
+                      onClick={() => navigate('/dnas')}
+                      className={cn(
+                        'flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md',
+                        hasThis
+                          ? `${dna.border} ${dna.bg}`
+                          : 'border-dashed border-muted-foreground/30 hover:border-violet-300 hover:bg-violet-50/30',
+                      )}
+                    >
+                      <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', dna.iconBg)}>
+                        <Icon className={cn('w-4 h-4', dna.color)} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn('font-semibold text-sm', hasThis ? dna.color : 'text-foreground')}>
+                          {dna.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{dna.description}</p>
+                      </div>
+                      {hasThis ? (
+                        <Badge variant="outline" className={cn('text-xs shrink-0', dna.border, dna.color)}>
+                          {count}
+                        </Badge>
+                      ) : (
+                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 flex justify-end">
+                <Button
+                  variant={hasAnyDna ? 'outline' : 'default'}
+                  size="sm"
+                  onClick={() => navigate('/dnas')}
+                  className={cn(
+                    'gap-1.5',
+                    !hasAnyDna && 'bg-violet-600 hover:bg-violet-700 text-white',
+                  )}
+                >
+                  <Dna className="w-3.5 h-3.5" />
+                  {hasAnyDna ? 'Gestionar DNAs' : 'Crear tu primer DNA'}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </section>
+
+            {/* ── PASO 2: VSL Maker ───────────────────────── */}
+            <section className={cn(!hasAnyDna && 'opacity-50 pointer-events-none')}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground text-sm font-bold shrink-0">
+                  2
+                </span>
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground">Genera tu VSL</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Crea un guion de venta sección por sección con la IA.
+                    {!hasAnyDna && <span className="italic"> Crea al menos un DNA primero.</span>}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigate('/vsl')}
+                className="w-full p-6 rounded-xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-purple-50 hover:shadow-lg hover:border-violet-300 transition-all text-left group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-foreground text-lg group-hover:text-violet-700 transition-colors">
+                      VSL Maker
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Genera un Video Sales Letter completo de 12 secciones. La IA usa tus DNAs + las instrucciones de tu producto para crear un guion de venta de alta conversión.
+                    </p>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-violet-600 font-semibold mt-3 group-hover:gap-2.5 transition-all">
+                      Abrir VSL Maker <ArrowRight className="w-4 h-4" />
+                    </span>
+                  </div>
+                </div>
+              </button>
+            </section>
+
+            {/* ── PASO 3: Agente de Anuncios ───────────────── */}
+            <section className={cn(!hasAnyDna && 'opacity-50 pointer-events-none')}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground text-sm font-bold shrink-0">
+                  3
+                </span>
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground">Agente de Anuncios</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Busca anuncios ganadores y los adapta automáticamente a tu voz y producto.
+                    {!hasAnyDna && <span className="italic"> Crea al menos un DNA primero.</span>}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigate('/ads-agent')}
+                className="w-full p-6 rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-sky-50 hover:shadow-lg hover:border-blue-300 transition-all text-left group"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-sky-600 flex items-center justify-center shrink-0">
+                    <Bot className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-foreground text-lg group-hover:text-blue-700 transition-colors">
+                      Agente de Anuncios
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      El agente busca anuncios activos en Meta Ads Library (ganadores comprobados), los analiza y los reescribe con tu personalidad. Entrega 15-30 guiones por Telegram o email.
+                    </p>
+                    <div className="flex items-center gap-3 mt-3">
+                      <span className="inline-flex items-center gap-1.5 text-sm text-blue-600 font-semibold group-hover:gap-2.5 transition-all">
+                        Abrir Agente <ArrowRight className="w-4 h-4" />
+                      </span>
+                      <span className="text-xs text-muted-foreground">Requiere cuenta Apify</span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </section>
+          </>
         )}
       </main>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!projectToDelete} onOpenChange={() => setProjectToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar proyecto?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. Se eliminarán todos los datos del proyecto y los copys generados asociados.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'Eliminando...' : 'Eliminar'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

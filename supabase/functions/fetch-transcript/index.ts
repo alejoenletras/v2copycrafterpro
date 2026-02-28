@@ -169,7 +169,7 @@ async function fetchYouTubeNative(url: string): Promise<string> {
 function extractPlayerResponse(html: string): any {
   // Try multiple patterns since YouTube updates their page structure
   const patterns = [
-    /ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;[\s\n]*(?:var|window|if|</,
+    /ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;[\s\n]*(?:var|window|if|<)/,
     /ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/,
     /"ytInitialPlayerResponse"\s*:\s*(\{.+?\})(?:,\s*"|\s*})/,
   ];

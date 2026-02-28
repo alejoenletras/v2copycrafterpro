@@ -4,7 +4,14 @@
       "Bash(awk:*)",
       "Bash(npx supabase link:*)",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_af4a621f7d92a7f88a1953903b326a68d44568b4 npx supabase:*)",
+      "Bash(npm run build:*)",
+      "Bash(supabase --version:*)",
+      "Bash(supabase functions list:*)",
+      "Bash(supabase status:*)",
+      "Bash(supabase login:*)",
+      "Bash(supabase functions deploy:*)"
     ]
   }
 }
