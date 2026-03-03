@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDNAs } from '@/hooks/useDNAs';
 import { useVideoInspirations } from '@/hooks/useVideoInspirations';
-import { useReferences } from '@/hooks/useReferences';
 import UploadPanel from '@/components/video-inspiration/UploadPanel';
 import AnalysisReview from '@/components/video-inspiration/AnalysisReview';
 import ScoredAdCard from '@/components/video-inspiration/ScoredAdCard';
@@ -72,8 +71,6 @@ export default function VideoInspirationPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { dnas } = useDNAs();
-  const { createReference } = useReferences();
-
   const {
     inspirations, isLoading: listLoading,
     createInspiration, uploadVideo, isUploading,
@@ -375,18 +372,7 @@ export default function VideoInspirationPage() {
   };
 
   const handleSaveAsReference = async () => {
-    if (!analysis) return;
-    try {
-      createReference({
-        name: analysis.summary?.substring(0, 60) || 'Video de referencia',
-        category: 'ad',
-        content: JSON.stringify(analysis, null, 2),
-        tags: analysis.key_techniques || [],
-        notes: `Tipo: ${analysis.content_type}, Tono: ${analysis.tone}, Estructura: ${analysis.persuasion_structure}`,
-      });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    }
+    toast({ title: 'Próximamente', description: 'Ejecuta la migración 20260303_training_system.sql para habilitar referencias.' });
   };
 
   // ─── Derived ───────────────────────────────────────────────────────────────
