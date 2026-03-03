@@ -31,13 +31,20 @@ export function useVideoInspirations() {
   const { data: inspirations, isLoading, error } = useQuery({
     queryKey: ['video-inspirations'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('video_inspirations')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as VideoInspiration[];
+      try {
+        const { data, error } = await supabase
+          .from('video_inspirations')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data as VideoInspiration[];
+      } catch (err) {
+        console.error('video_inspirations query failed:', err);
+        return [] as VideoInspiration[];
+      }
     },
+    retry: false,
+    structuralSharing: false,
   });
 
   // Create new inspiration record
