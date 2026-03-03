@@ -152,7 +152,7 @@ Escribe ÚNICAMENTE el texto de esta sección del VSL. No incluyas encabezados c
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-opus-4-6",
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userMessage }],

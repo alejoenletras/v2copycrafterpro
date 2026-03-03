@@ -1,4 +1,6 @@
 import ScheduleConfig from '@/components/agent/ScheduleConfig';
+import ReferentProfiles from '@/components/agent/ReferentProfiles';
+import ScriptCard from '@/components/agent/ScriptCard';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDNAs } from '@/hooks/useDNAs';
@@ -7,11 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Home, Loader2, Mic, Users, Package, ChevronDown,
-  Download, Mail, Send, AlertCircle, Sparkles, Zap, Bot,
-  CheckCircle2, Radio, ExternalLink,
+  Mail, Send, AlertCircle, Sparkles, Zap, Bot,
+  CheckCircle2, Radio, ExternalLink, Camera,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import type { AgentResult, ModeledScript } from '@/types';
 
 // ─── N8N Webhook ────────────────────────────────────────────────────────────
 
@@ -115,13 +118,18 @@ export default function AdsAgentPage() {
   // Delivery
   const [telegramChatId, setTelegramChatId] = useState(saved.telegram_chat_id || '');
   const [email, setEmail] = useState(saved.email || '');
-  const [schedule, setSchedule] = useState<'manual' | 'daily' | 'weekly'>(saved.schedule || 'manual');
+  const [schedule] = useState<'manual' | 'daily' | 'weekly'>(saved.schedule || 'manual');
+
+  // Referents
+  const [referentNames, setReferentNames] = useState<string[]>([]);
 
   // State
   const [isRunning, setIsRunning] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'working' | 'done'>('idle');
   const [resultMessage, setResultMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
+  const [generatedScripts, setGeneratedScripts] = useState<ModeledScript[]>([]);
 
   // Auto-select first DNA of each type
   useEffect(() => {
@@ -151,14 +159,12 @@ export default function AdsAgentPage() {
     if (!dna?.data) return '';
     const d = dna.data as Record<string, any>;
 
-    // Safe join: handles values that may be string, array, or undefined
     const safeJoin = (val: any, sep = ', '): string => {
       if (Array.isArray(val)) return val.join(sep) || 'No especificado';
       if (typeof val === 'string') return val || 'No especificado';
       return 'No especificado';
     };
 
-    // Safe list: returns array items as bullet lines, or fallback
     const safeList = (val: any, prefix = '- '): string[] => {
       if (Array.isArray(val) && val.length > 0) return val.map((item: any) => `${prefix}${typeof item === 'string' ? item : JSON.stringify(item)}`);
       if (typeof val === 'string' && val) return [`${prefix}${val}`];
@@ -247,7 +253,6 @@ export default function AdsAgentPage() {
       ].join('\n');
     }
 
-    // Fallback for unknown types
     return Object.entries(d)
       .filter(([, v]) => v !== null && v !== undefined && v !== '')
       .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
@@ -268,7 +273,6 @@ export default function AdsAgentPage() {
       return;
     }
 
-    // Save config
     saveConfig({
       search_mode: searchMode, search_query: searchQuery,
       countries: selectedCountries, max_ads: maxAds,
@@ -278,6 +282,8 @@ export default function AdsAgentPage() {
     setIsRunning(true);
     setError(null);
     setResultMessage('');
+    setGeneratedScripts([]);
+    setAgentResult(null);
     setPhase('working');
 
     try {
@@ -296,18 +302,21 @@ export default function AdsAgentPage() {
           dna_product: buildDnaString(productId),
           telegram_chat_id: telegramChatId,
           email: email || undefined,
+          referentes: referentNames.length > 0 ? referentNames : undefined,
         }),
-        signal: AbortSignal.timeout(300000), // 5 min
+        signal: AbortSignal.timeout(300000),
       });
 
-      const result = await response.json();
+      const result: AgentResult = await response.json();
 
       if (result.success) {
         setPhase('done');
         setResultMessage(result.message || 'Scripts generados y enviados');
+        setAgentResult(result);
+        setGeneratedScripts(result.scripts || []);
         toast({ description: result.message || 'Scripts enviados' });
       } else {
-        throw new Error(result.error || result.message || 'Error en el agente');
+        throw new Error((result as any).error || result.message || 'Error en el agente');
       }
 
     } catch (err) {
@@ -319,6 +328,16 @@ export default function AdsAgentPage() {
       setIsRunning(false);
     }
   };
+
+  const handleNewSearch = () => {
+    setPhase('idle');
+    setResultMessage('');
+    setGeneratedScripts([]);
+    setAgentResult(null);
+  };
+
+  const pc = agentResult?.platformCounts;
+  const stats = agentResult?.stats;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -354,6 +373,11 @@ export default function AdsAgentPage() {
                   dnas={dnas || []} selectedId={productId} onSelect={setProductId} />
               </div>
             </div>
+
+            <div className="border-t border-border" />
+
+            {/* Referent Profiles */}
+            <ReferentProfiles onReferentsChange={setReferentNames} />
 
             <div className="border-t border-border" />
 
@@ -474,18 +498,6 @@ export default function AdsAgentPage() {
 
             <div className="border-t border-border" />
 
-            {/* Schedule */}
-            <ScheduleConfig
-              keyword={searchQuery}
-              countries={selectedCountries}
-              maxAds={maxAds}
-              dnaExpert={buildDnaString(personalityId)}
-              dnaAudience={buildDnaString(audienceId)}
-              dnaProduct={buildDnaString(productId)}
-              telegramChatId={telegramChatId}
-              email={email}
-            />
-
             {/* CTA Button */}
             <Button
               onClick={handleRun}
@@ -505,10 +517,24 @@ export default function AdsAgentPage() {
                 <span>{error}</span>
               </div>
             )}
+
+            <div className="border-t border-border" />
+
+            {/* Schedule */}
+            <ScheduleConfig
+              keyword={searchQuery}
+              countries={selectedCountries}
+              maxAds={maxAds}
+              dnaExpert={buildDnaString(personalityId)}
+              dnaAudience={buildDnaString(audienceId)}
+              dnaProduct={buildDnaString(productId)}
+              telegramChatId={telegramChatId}
+              email={email}
+            />
           </div>
         </aside>
 
-        {/* ── Right panel: Status ──────────────────────────────────────────── */}
+        {/* ── Right panel: Results ──────────────────────────────────────────── */}
         <main className="flex-1 overflow-y-auto bg-muted/20">
 
           {phase === 'working' && (
@@ -520,19 +546,25 @@ export default function AdsAgentPage() {
               <div className="space-y-2 text-sm text-muted-foreground max-w-md">
                 <div className="flex items-center gap-2 justify-center">
                   <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
-                  <span>Buscando anuncios ganadores en Facebook + TikTok</span>
+                  <span>Buscando anuncios ganadores en Facebook, Instagram + TikTok</span>
                 </div>
                 <p className="text-xs mt-4 text-muted-foreground/70">
-                  Esto puede tardar 2-4 minutos. El agente busca, filtra por criterio de ganadores,
-                  modela los guiones con Claude y los envía por Telegram/email.
+                  Esto puede tardar 3-5 minutos. El agente busca, filtra por criterio de ganadores,
+                  analiza la estructura, modela los guiones sección por sección, y audita la calidad.
                 </p>
               </div>
-              <div className="mt-8 grid grid-cols-4 gap-6 text-xs text-muted-foreground">
+              <div className="mt-8 grid grid-cols-5 gap-4 text-xs text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                     <Radio className="w-4 h-4 text-blue-600" />
                   </div>
                   <span>FB Ads</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
+                    <Camera className="w-4 h-4 text-fuchsia-600" />
+                  </div>
+                  <span>Instagram</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
@@ -557,35 +589,101 @@ export default function AdsAgentPage() {
           )}
 
           {phase === 'done' && (
-            <div className="flex flex-col items-center justify-center h-full py-24 px-8 text-center">
-              <div className="w-20 h-20 rounded-2xl bg-emerald-100 flex items-center justify-center mb-6">
-                <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+            <div className="p-6 space-y-6">
+              {/* Summary header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    Agente completado
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">{resultMessage}</p>
+                </div>
+                <Button onClick={handleNewSearch} variant="outline" size="sm" className="gap-1 text-xs">
+                  <Zap className="w-3 h-3" /> Nueva búsqueda
+                </Button>
               </div>
-              <h2 className="font-semibold text-lg text-foreground mb-2">Agente completado</h2>
-              <p className="text-sm text-muted-foreground mb-6 max-w-sm">{resultMessage}</p>
 
-              <div className="space-y-3 w-full max-w-xs">
+              {/* Stats bar */}
+              <div className="flex flex-wrap gap-3">
+                {pc && (
+                  <div className="flex gap-2 text-xs">
+                    <Badge variant="secondary" className="gap-1">
+                      <Radio className="w-3 h-3 text-blue-600" /> FB: {pc.facebook}
+                    </Badge>
+                    <Badge variant="secondary" className="gap-1">
+                      <Camera className="w-3 h-3 text-fuchsia-600" /> IG: {pc.instagram}
+                    </Badge>
+                    <Badge variant="secondary" className="gap-1">
+                      <ExternalLink className="w-3 h-3 text-pink-600" /> TK: {pc.tiktok}
+                    </Badge>
+                  </div>
+                )}
+                {stats && (
+                  <div className="flex gap-2 text-xs">
+                    <Badge variant="outline">
+                      Score prom: {stats.average_quality_score}/100
+                    </Badge>
+                    <Badge variant="outline">
+                      Tiempo: {Math.round(stats.processing_time_ms / 1000)}s
+                    </Badge>
+                  </div>
+                )}
+              </div>
+
+              {/* Warnings */}
+              {agentResult?.warnings && agentResult.warnings.length > 0 && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-1">
+                  {agentResult.warnings.map((w, i) => (
+                    <p key={i} className="text-xs text-amber-700 flex items-center gap-1.5">
+                      <AlertCircle className="w-3 h-3 shrink-0" /> {w}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Delivery confirmations */}
+              <div className="flex gap-3">
                 {telegramChatId && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-50 border border-sky-200 text-sm">
-                    <Send className="w-5 h-5 text-sky-600 shrink-0" />
-                    <span className="text-sky-800">Guiones enviados a Telegram</span>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sky-50 border border-sky-200 text-xs">
+                    <Send className="w-3.5 h-3.5 text-sky-600" />
+                    <span className="text-sky-800">Telegram enviado</span>
                   </div>
                 )}
                 {email && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm">
-                    <Mail className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span className="text-emerald-800">Email enviado a {email}</span>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
+                    <Mail className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-800">Email enviado</span>
                   </div>
+                )}
+                {agentResult?.docUrl && (
+                  <a
+                    href={agentResult.docUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-200 text-xs hover:bg-violet-100 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-violet-600" />
+                    <span className="text-violet-800">Abrir Google Doc</span>
+                  </a>
                 )}
               </div>
 
-              <Button
-                onClick={() => { setPhase('idle'); setResultMessage(''); }}
-                variant="outline"
-                className="mt-6 gap-2"
-              >
-                <Zap className="w-4 h-4" /> Lanzar otra búsqueda
-              </Button>
+              {/* Generated scripts */}
+              {generatedScripts.length > 0 && (
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Guiones generados ({generatedScripts.length}) — Edita y corrige para entrenar la IA
+                  </p>
+                  {generatedScripts.map((script) => (
+                    <ScriptCard
+                      key={script.content_number}
+                      script={script}
+                      dnaExpertId={personalityId}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -597,14 +695,20 @@ export default function AdsAgentPage() {
               <h2 className="font-semibold text-lg text-foreground mb-2">Agente listo</h2>
               <p className="text-sm text-muted-foreground max-w-sm">
                 Configura la búsqueda, selecciona tus DNAs y lanza el agente.
-                Buscará anuncios ganadores en Facebook y TikTok, los adaptará a tu voz y los enviará por Telegram y email.
+                Buscará anuncios ganadores en Facebook, Instagram y TikTok, los adaptará a tu voz y los enviará por Telegram y email.
               </p>
-              <div className="mt-6 grid grid-cols-4 gap-4 text-xs text-muted-foreground">
+              <div className="mt-6 grid grid-cols-5 gap-3 text-xs text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                     <Radio className="w-4 h-4 text-blue-600" />
                   </div>
-                  <span>FB Ads Library</span>
+                  <span>FB Ads</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
+                    <Camera className="w-4 h-4 text-fuchsia-600" />
+                  </div>
+                  <span>Instagram</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">

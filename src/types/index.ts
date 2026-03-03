@@ -348,3 +348,164 @@ export interface ExtractedField {
   value: string;
   confidence: 'high' | 'low' | 'missing';
 }
+
+// ─── Training & Optimization System ─────────────────────────────────────────
+
+export type CorrectionType = 'tone' | 'structure' | 'content' | 'complete_rewrite' | 'minor_edit';
+export type ReferenceCategory = 'ad' | 'vsl' | 'email' | 'landing' | 'other';
+export type ReferentPlatform = 'facebook' | 'instagram' | 'tiktok' | 'youtube' | 'other';
+export type PatternType = 'tone' | 'structure' | 'vocabulary' | 'technique' | 'general';
+
+export interface ScriptCorrection {
+  id: string;
+  user_id: string;
+  original_ad_text?: string;
+  generated_script: Record<string, string>;
+  corrected_script: Record<string, string>;
+  correction_type?: CorrectionType;
+  correction_notes?: string;
+  dna_expert_id?: string;
+  dna_audience_id?: string;
+  dna_product_id?: string;
+  quality_score_before?: number;
+  quality_score_after?: number;
+  created_at: string;
+}
+
+export interface ReferenceScript {
+  id: string;
+  user_id: string;
+  name: string;
+  category: ReferenceCategory;
+  content: string;
+  source_url?: string;
+  source_author?: string;
+  tags: string[];
+  notes?: string;
+  is_favorite: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReferentProfile {
+  id: string;
+  user_id: string;
+  name: string;
+  platform: ReferentPlatform;
+  profile_url?: string;
+  fan_page_name?: string;
+  niche?: string;
+  notes?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TrainingPattern {
+  id: string;
+  user_id: string;
+  dna_expert_id?: string;
+  pattern_type: PatternType;
+  description: string;
+  examples: Array<{ before: string; after: string }>;
+  strength: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModeledScript {
+  content_number: number;
+  referente: string;
+  platform: string;
+  link: string;
+  hook_1: string;
+  hook_2: string;
+  cuerpo: string;
+  cta_1: string;
+  cta_2: string;
+  quality_score: number;
+  attempts: number;
+  needs_review: boolean;
+  pending_items?: string[];
+}
+
+export interface AgentResult {
+  success: boolean;
+  message: string;
+  keyword: string;
+  docUrl?: string | null;
+  platformCounts?: { facebook: number; instagram: number; tiktok: number };
+  warnings?: string[];
+  stats?: {
+    total_ads_processed: number;
+    average_quality_score: number;
+    retries_used: number;
+    processing_time_ms: number;
+  };
+  scripts?: ModeledScript[];
+}
+
+// ─── Video Inspiration Agent ─────────────────────────────────────────────────
+
+export type VideoInspirationStatus =
+  | 'pending'
+  | 'analyzing'
+  | 'analyzed'
+  | 'searching'
+  | 'scoring'
+  | 'scored'
+  | 'modeling'
+  | 'completed'
+  | 'error';
+
+export type VideoSourceType = 'upload' | 'url';
+
+export interface VideoAnalysis {
+  summary: string;
+  content_type: string;
+  tone: string;
+  visual_style: string;
+  key_techniques: string[];
+  target_audience_profile: string;
+  search_keywords: string[];
+  estimated_duration_seconds: number;
+  hook_analysis: string;
+  cta_analysis: string;
+  persuasion_structure: string;
+}
+
+export interface ScoredAd {
+  ad_id: string;
+  ad_text: string;
+  advertiser_name: string;
+  headline?: string;
+  cta_text?: string;
+  days_running?: number | null;
+  video_url?: string | null;
+  keyword_source?: string;
+  similarity_score: number;
+  reasoning: string;
+  technique_match: string[];
+  recommended: boolean;
+}
+
+export interface VideoInspiration {
+  id: string;
+  user_id: string;
+  source_type: VideoSourceType;
+  source_url?: string;
+  storage_path?: string;
+  platform?: string;
+  status: VideoInspirationStatus;
+  error_message?: string;
+  analysis?: VideoAnalysis;
+  search_results?: Record<string, unknown>[];
+  search_keywords_used?: string[];
+  scored_results?: ScoredAd[];
+  selected_ad_indices?: number[];
+  dna_expert_id?: string;
+  dna_audience_id?: string;
+  dna_product_id?: string;
+  modeled_scripts?: ModeledScript[];
+  created_at: string;
+  updated_at: string;
+}

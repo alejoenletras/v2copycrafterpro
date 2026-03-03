@@ -7,6 +7,8 @@ import DashboardPage from "./pages/DashboardPage";
 import DNAsPage from "./pages/DNAsPage";
 import VslMakerPage from "./pages/VslMakerPage";
 import AdsAgentPage from "./pages/AdsAgentPage";
+import ReferencesPage from "./pages/ReferencesPage";
+import VideoInspirationPage from "./pages/VideoInspirationPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +24,8 @@ const App = () => (
           <Route path="/dnas" element={<DNAsPage />} />
           <Route path="/vsl" element={<VslMakerPage />} />
           <Route path="/ads-agent" element={<AdsAgentPage />} />
+          <Route path="/references" element={<ReferencesPage />} />
+          <Route path="/video-inspiration" element={<VideoInspirationPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

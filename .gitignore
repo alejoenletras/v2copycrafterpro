@@ -26,7 +26,4 @@ dist-ssr
 # Environment variables
 .env
 .env.*
-n8n-workflow-agente-anuncios-v3.json
-n8n-workflow-agente-anuncios-v4.json
-n8n-workflow-agente-anuncios-v3.json
-n8n-workflow-agente-anuncios-v4.json
+n8n-workflow-agente-anuncios*.json

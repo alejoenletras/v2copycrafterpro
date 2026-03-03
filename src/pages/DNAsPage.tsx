@@ -153,6 +153,14 @@ export default function DNAsPage() {
     setFieldStatus(statuses);
   }, [selectedDna?.id]);
 
+  // Open name editing automatically when switching to manual mode with a generic name
+  useEffect(() => {
+    if (panelMode === 'manual' && selectedDna?.name?.includes('Sin título')) {
+      setTempName('');
+      setEditingName(true);
+    }
+  }, [panelMode, selectedDna?.id]);
+
   // Auto-save with debounce
   const scheduleAutoSave = (newData: Record<string, string>, newStatus: Record<string, DnaFieldStatus>) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -258,11 +266,14 @@ export default function DNAsPage() {
     setFieldStatus(newStatus);
     setPanelMode('manual'); // Switch to manual for review
 
-    // Update DNA name if a better name is suggested and current name is generic
-    if (suggestedName && selectedDna?.name?.includes('Sin título')) {
+    // Always update name if it's still generic — use suggested or date fallback
+    if (selectedDna?.name?.includes('Sin título')) {
+      const typeLabel = DNA_SECTIONS.find(s => s.type === selectedDna.type)?.label ?? selectedDna.type;
+      const fallback = `${typeLabel} ${new Date().toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })}`;
+      const nameToSet = suggestedName?.trim() || fallback;
       try {
-        await updateDNAAsync({ id: selectedDna.id, updates: { name: suggestedName } });
-        setSelectedDna((prev: any) => ({ ...prev, name: suggestedName }));
+        await updateDNAAsync({ id: selectedDna.id, updates: { name: nameToSet } });
+        setSelectedDna((prev: any) => ({ ...prev, name: nameToSet }));
       } catch (_) { /* ignore name update error */ }
     }
 
