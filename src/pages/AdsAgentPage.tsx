@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import {
   Home, Bot, Loader2, Mic, Users, Package,
   ChevronDown, Plus, X, Zap, Send, RotateCcw,
-  Info, Link as LinkIcon,
+  Info, Link as LinkIcon, FileText, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdObjective } from '@/types';
@@ -108,7 +108,9 @@ export default function AdsAgentPage() {
   const [ctaText, setCtaText] = useState('');
   const [references, setReferences] = useState<string[]>([]);
   const [newRef, setNewRef] = useState('');
+  const [documents, setDocuments] = useState<Array<{ name: string; content: string }>>([]);
   const [followUpText, setFollowUpText] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-select first DNA of each type
   useEffect(() => {
@@ -144,7 +146,26 @@ export default function AdsAgentPage() {
       instructions,
       ctaText,
       references,
+      documents: documents.length > 0 ? documents : undefined,
     });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (file.size > 1_000_000) continue; // 1MB limit
+      try {
+        const content = await file.text();
+        setDocuments(prev => [...prev, {
+          name: file.name,
+          content: content.substring(0, 10000), // 10k chars max per doc
+        }]);
+      } catch {
+        // skip binary files
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleAddRef = () => {
@@ -258,6 +279,49 @@ export default function AdsAgentPage() {
               />
               <p className="text-xs text-muted-foreground mt-1.5">
                 Escribe cualquier contenido, instrucciones o ideas que quieras convertir en anuncios.
+              </p>
+            </div>
+
+            {/* Document upload */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-2">
+                <FileText className="w-3 h-3 inline mr-1" />
+                Documentos de referencia (opcional)
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".txt,.md,.html,.csv,.json,.doc,.docx,.pdf"
+                multiple
+                onChange={handleFileUpload}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border text-sm text-muted-foreground hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50/50 transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                Subir documentos
+              </button>
+              {documents.length > 0 && (
+                <div className="space-y-1.5 mt-2">
+                  {documents.map((doc, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-200 text-xs">
+                      <FileText className="w-3 h-3 text-violet-600 shrink-0" />
+                      <span className="truncate flex-1 text-violet-700 font-medium">{doc.name}</span>
+                      <span className="text-violet-400 shrink-0">{Math.ceil(doc.content.length / 1000)}k</span>
+                      <button
+                        onClick={() => setDocuments(prev => prev.filter((_, idx) => idx !== i))}
+                        className="text-violet-400 hover:text-destructive shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Sube paginas de venta, briefs, guiones previos u otros docs. La IA los lee antes de generar.
               </p>
             </div>
 

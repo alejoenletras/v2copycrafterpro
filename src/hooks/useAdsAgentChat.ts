@@ -188,6 +188,7 @@ export function useAdsAgentChat() {
     instructions: string;
     ctaText: string;
     references: string[];
+    documents?: Array<{ name: string; content: string }>;
   }) => {
     if (isProcessing) return;
     setIsProcessing(true);
@@ -201,6 +202,9 @@ export function useAdsAgentChat() {
     if (params.references.length > 0) {
       parts.push(`Referencias:\n${params.references.map((r, i) => `${i + 1}. ${r}`).join('\n')}`);
     }
+    if (params.documents && params.documents.length > 0) {
+      parts.push(`Documentos adjuntos:\n${params.documents.map((d, i) => `--- ${d.name} ---\n${d.content}`).join('\n\n')}`);
+    }
 
     const userContent = parts.join('\n');
     const userMsg = makeMsg('user', userContent);
@@ -212,11 +216,17 @@ export function useAdsAgentChat() {
     setMessages(prev => [...prev, loadingMsg]);
 
     try {
+      // Combine references + document contents for the AI
+      const allRefs = [
+        ...params.references,
+        ...(params.documents || []).map(d => `[Documento: ${d.name}]\n${d.content}`),
+      ];
+
       const response = await sendToAgent(
         newMessages,
         params.objective,
         params.ctaText,
-        params.references,
+        allRefs,
       );
 
       // Remove loading
