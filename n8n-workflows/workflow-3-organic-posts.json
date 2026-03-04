@@ -1,0 +1,562 @@
+{
+  "name": "HOOQ v2 — WF3: Organic Posts Scraping (IG + TikTok)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 24 }]
+        }
+      },
+      "id": "c3000001-0001-0001-0001-000000000001",
+      "name": "Schedule: Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "or", "value": "(ig_status.eq.found,tiktok_status.eq.found)" },
+            { "name": "select", "value": "*" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000002",
+      "name": "Get Found Competitors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/scrape_runs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"source\": \"instagram\",\n  \"status\": \"running\",\n  \"max_results\": 20\n}",
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000003",
+      "name": "Create Scrape Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Guardar run_id y preparar items de competidores\nconst runResult = $input.first().json;\nconst competitors = $('Get Found Competitors').first().json;\nconst runId = Array.isArray(runResult) ? runResult[0]?.id : runResult?.id;\nconst comps = Array.isArray(competitors) ? competitors : [competitors];\n\nreturn comps.filter(c => c && !c._empty).map(c => ({\n  json: { ...c, run_id: runId }\n}));"
+      },
+      "id": "c3000001-0001-0001-0001-000000000004",
+      "name": "Prepare Competitors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ig_status }}",
+              "rightValue": "found",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.ig_handle }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "c3000001-0001-0001-0001-000000000010",
+      "name": "IF: Has IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~instagram-scraper/runs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"directUrls\": [\"https://www.instagram.com/{{ $json.ig_handle }}/\"],\n  \"resultsType\": \"posts\",\n  \"resultsLimit\": 20\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "c3000001-0001-0001-0001-000000000011",
+      "name": "Apify: IG Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 140]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "c3000001-0001-0001-0001-000000000012",
+      "name": "Wait IG",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1540, 140]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $('Apify: IG Posts').item.json.data.defaultDatasetId }}/items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000013",
+      "name": "Get IG Posts Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtrar posts de IG por views/likes y normalizar\nconst posts = $input.first().json;\nconst competitor = $('IF: Has IG').first().json;\nconst items = Array.isArray(posts) ? posts : [posts];\n\nconst filtered = items.filter(p => {\n  if (!p || p._empty) return false;\n  const isVideo = p.type === 'Video' || p.videoUrl;\n  if (isVideo) return (p.videoViewCount || p.videoPlayCount || 0) >= 50000;\n  return (p.likesCount || 0) >= 5000;\n}).map(p => {\n  const isVideo = p.type === 'Video' || p.videoUrl;\n  const isCarousel = p.type === 'Sidecar' || (p.images && p.images.length > 1);\n  return {\n    competitor_id: competitor.id,\n    platform: 'instagram',\n    post_type: isVideo ? 'video' : (isCarousel ? 'carousel' : 'image'),\n    post_url: p.url || p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : null,\n    post_id: p.id || p.shortCode || '',\n    posted_at: p.timestamp || null,\n    views: p.videoViewCount || p.videoPlayCount || 0,\n    likes: p.likesCount || 0,\n    comments: p.commentsCount || 0,\n    shares: 0,\n    caption: p.caption || '',\n    media_url: p.videoUrl || p.displayUrl || (p.images && p.images[0]) || null,\n    thumbnail_url: p.displayUrl || null,\n    run_id: competitor.run_id\n  };\n});\n\nreturn filtered.length > 0 \n  ? filtered.map(p => ({ json: p }))\n  : [{ json: { _empty: true, run_id: competitor.run_id, competitor_id: competitor.id } }];"
+      },
+      "id": "c3000001-0001-0001-0001-000000000014",
+      "name": "Filter IG Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 140]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json._empty }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "notTrue" }
+            }
+          ]
+        }
+      },
+      "id": "c3000001-0001-0001-0001-000000000015",
+      "name": "IF: Has IG Posts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2200, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5-20250929\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Eres un analista de advertising. Analiza este post orgánico de Instagram y extrae: hook, estructura narrativa, tono, CTA implícito, audiencia target, y técnicas persuasivas usadas.\\n\\nCaption: {{ $json.caption }}\\nTipo: {{ $json.post_type }}\\nViews: {{ $json.views }}\\nLikes: {{ $json.likes }}\\nComments: {{ $json.comments }}\"\n  }]\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "c3000001-0001-0001-0001-000000000016",
+      "name": "Sonnet: Analyze IG Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 40]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer texto del análisis\nconst response = $input.first().json;\nconst prev = $('IF: Has IG Posts').first().json;\nconst analysis = response.content?.[0]?.text || '';\n\nreturn [{ json: { ...prev, content_analysis: analysis } }];"
+      },
+      "id": "c3000001-0001-0001-0001-000000000017",
+      "name": "Parse IG Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 40]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 3000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Eres un copywriter experto en direct response para Latinoamérica. Reescribe este post orgánico manteniendo la estructura efectiva pero con copy fresco y persuasivo. Mantén el hook, mejora el CTA.\\n\\nPost original:\\n{{ $json.caption }}\\n\\nAnálisis:\\n{{ $json.content_analysis }}\\n\\nEscribe SOLO el copy reescrito, sin explicaciones.\"\n  }]\n}",
+        "options": { "timeout": 90000 }
+      },
+      "id": "c3000001-0001-0001-0001-000000000018",
+      "name": "Opus: Rewrite IG Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 40]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar post para insertar en Supabase\nconst response = $input.first().json;\nconst prev = $('Parse IG Analysis').first().json;\nconst rewritten = response.content?.[0]?.text || '';\n\nreturn [{\n  json: {\n    competitor_id: prev.competitor_id,\n    platform: prev.platform,\n    post_type: prev.post_type,\n    post_url: prev.post_url,\n    post_id: prev.post_id,\n    posted_at: prev.posted_at,\n    views: prev.views,\n    likes: prev.likes,\n    comments: prev.comments,\n    shares: prev.shares || 0,\n    caption: prev.caption,\n    media_url: prev.media_url,\n    thumbnail_url: prev.thumbnail_url,\n    content_analysis: prev.content_analysis,\n    rewritten_copy: rewritten,\n    analyzed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "c3000001-0001-0001-0001-000000000019",
+      "name": "Prepare IG Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 40]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/organic_posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000020",
+      "name": "Insert IG Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3300, 40]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.tiktok_status }}",
+              "rightValue": "found",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.tiktok_handle }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "c3000001-0001-0001-0001-000000000030",
+      "name": "IF: Has TikTok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/clockworks~tiktok-scraper/runs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"profiles\": [\"{{ $json.tiktok_handle }}\"],\n  \"resultsPerPage\": 20,\n  \"shouldDownloadVideos\": false\n}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "c3000001-0001-0001-0001-000000000031",
+      "name": "Apify: TikTok Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 560]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "c3000001-0001-0001-0001-000000000032",
+      "name": "Wait TikTok",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1540, 560]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $('Apify: TikTok Posts').item.json.data.defaultDatasetId }}/items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000033",
+      "name": "Get TikTok Posts Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtrar posts de TikTok por views >= 50000\nconst posts = $input.first().json;\nconst competitor = $('IF: Has TikTok').first().json;\nconst items = Array.isArray(posts) ? posts : [posts];\n\nconst filtered = items.filter(p => {\n  if (!p || p._empty) return false;\n  return (p.playCount || p.stats?.playCount || 0) >= 50000;\n}).map(p => ({\n  competitor_id: competitor.id,\n  platform: 'tiktok',\n  post_type: 'video',\n  post_url: p.webVideoUrl || `https://www.tiktok.com/@${competitor.tiktok_handle}/video/${p.id}`,\n  post_id: p.id || '',\n  posted_at: p.createTimeISO || (p.createTime ? new Date(p.createTime * 1000).toISOString() : null),\n  views: p.playCount || p.stats?.playCount || 0,\n  likes: p.diggCount || p.stats?.diggCount || 0,\n  comments: p.commentCount || p.stats?.commentCount || 0,\n  shares: p.shareCount || p.stats?.shareCount || 0,\n  caption: p.text || p.desc || '',\n  media_url: p.videoUrl || null,\n  thumbnail_url: p.covers?.default || p.video?.cover || null,\n  run_id: competitor.run_id\n}));\n\nreturn filtered.length > 0\n  ? filtered.map(p => ({ json: p }))\n  : [{ json: { _empty: true, run_id: competitor.run_id, competitor_id: competitor.id } }];"
+      },
+      "id": "c3000001-0001-0001-0001-000000000034",
+      "name": "Filter TikTok Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 560]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json._empty }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "notTrue" }
+            }
+          ]
+        }
+      },
+      "id": "c3000001-0001-0001-0001-000000000035",
+      "name": "IF: Has TikTok Posts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2200, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5-20250929\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Eres un analista de advertising. Analiza este post orgánico de TikTok y extrae: hook (primeros 3 segundos), estructura narrativa, tono, CTA implícito, audiencia target, y técnicas persuasivas.\\n\\nCaption: {{ $json.caption }}\\nViews: {{ $json.views }}\\nLikes: {{ $json.likes }}\\nComments: {{ $json.comments }}\\nShares: {{ $json.shares }}\"\n  }]\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "c3000001-0001-0001-0001-000000000036",
+      "name": "Sonnet: Analyze TikTok Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prev = $('IF: Has TikTok Posts').first().json;\nconst analysis = response.content?.[0]?.text || '';\n\nreturn [{ json: { ...prev, content_analysis: analysis } }];"
+      },
+      "id": "c3000001-0001-0001-0001-000000000037",
+      "name": "Parse TikTok Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 3000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Eres un copywriter experto en direct response para Latinoamérica. Reescribe este post de TikTok manteniendo la estructura viral pero con copy fresco. Mantén el hook de los primeros 3 seg, mejora el CTA.\\n\\nPost original:\\n{{ $json.caption }}\\n\\nAnálisis:\\n{{ $json.content_analysis }}\\n\\nEscribe SOLO el copy reescrito, sin explicaciones.\"\n  }]\n}",
+        "options": { "timeout": 90000 }
+      },
+      "id": "c3000001-0001-0001-0001-000000000038",
+      "name": "Opus: Rewrite TikTok Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prev = $('Parse TikTok Analysis').first().json;\nconst rewritten = response.content?.[0]?.text || '';\n\nreturn [{\n  json: {\n    competitor_id: prev.competitor_id,\n    platform: prev.platform,\n    post_type: prev.post_type,\n    post_url: prev.post_url,\n    post_id: prev.post_id,\n    posted_at: prev.posted_at,\n    views: prev.views,\n    likes: prev.likes,\n    comments: prev.comments,\n    shares: prev.shares || 0,\n    caption: prev.caption,\n    media_url: prev.media_url,\n    thumbnail_url: prev.thumbnail_url,\n    content_analysis: prev.content_analysis,\n    rewritten_copy: rewritten,\n    analyzed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "c3000001-0001-0001-0001-000000000039",
+      "name": "Prepare TikTok Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/organic_posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000040",
+      "name": "Insert TikTok Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3300, 560]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/scrape_runs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $('Create Scrape Run').first().json[0]?.id || $('Create Scrape Run').first().json?.id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"completed\",\n  \"completed_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "c3000001-0001-0001-0001-000000000050",
+      "name": "Update Run: Completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3520, 400]
+    }
+  ],
+  "connections": {
+    "Schedule: Daily": { "main": [[{ "node": "Get Found Competitors", "type": "main", "index": 0 }]] },
+    "Get Found Competitors": { "main": [[{ "node": "Create Scrape Run", "type": "main", "index": 0 }]] },
+    "Create Scrape Run": { "main": [[{ "node": "Prepare Competitors", "type": "main", "index": 0 }]] },
+    "Prepare Competitors": { "main": [[
+      { "node": "IF: Has IG", "type": "main", "index": 0 },
+      { "node": "IF: Has TikTok", "type": "main", "index": 0 }
+    ]] },
+    "IF: Has IG": {
+      "main": [
+        [{ "node": "Apify: IG Posts", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Apify: IG Posts": { "main": [[{ "node": "Wait IG", "type": "main", "index": 0 }]] },
+    "Wait IG": { "main": [[{ "node": "Get IG Posts Data", "type": "main", "index": 0 }]] },
+    "Get IG Posts Data": { "main": [[{ "node": "Filter IG Posts", "type": "main", "index": 0 }]] },
+    "Filter IG Posts": { "main": [[{ "node": "IF: Has IG Posts", "type": "main", "index": 0 }]] },
+    "IF: Has IG Posts": {
+      "main": [
+        [{ "node": "Sonnet: Analyze IG Post", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Sonnet: Analyze IG Post": { "main": [[{ "node": "Parse IG Analysis", "type": "main", "index": 0 }]] },
+    "Parse IG Analysis": { "main": [[{ "node": "Opus: Rewrite IG Post", "type": "main", "index": 0 }]] },
+    "Opus: Rewrite IG Post": { "main": [[{ "node": "Prepare IG Insert", "type": "main", "index": 0 }]] },
+    "Prepare IG Insert": { "main": [[{ "node": "Insert IG Post", "type": "main", "index": 0 }]] },
+    "Insert IG Post": { "main": [[{ "node": "Update Run: Completed", "type": "main", "index": 0 }]] },
+    "IF: Has TikTok": {
+      "main": [
+        [{ "node": "Apify: TikTok Posts", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Apify: TikTok Posts": { "main": [[{ "node": "Wait TikTok", "type": "main", "index": 0 }]] },
+    "Wait TikTok": { "main": [[{ "node": "Get TikTok Posts Data", "type": "main", "index": 0 }]] },
+    "Get TikTok Posts Data": { "main": [[{ "node": "Filter TikTok Posts", "type": "main", "index": 0 }]] },
+    "Filter TikTok Posts": { "main": [[{ "node": "IF: Has TikTok Posts", "type": "main", "index": 0 }]] },
+    "IF: Has TikTok Posts": {
+      "main": [
+        [{ "node": "Sonnet: Analyze TikTok Post", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Sonnet: Analyze TikTok Post": { "main": [[{ "node": "Parse TikTok Analysis", "type": "main", "index": 0 }]] },
+    "Parse TikTok Analysis": { "main": [[{ "node": "Opus: Rewrite TikTok Post", "type": "main", "index": 0 }]] },
+    "Opus: Rewrite TikTok Post": { "main": [[{ "node": "Prepare TikTok Insert", "type": "main", "index": 0 }]] },
+    "Prepare TikTok Insert": { "main": [[{ "node": "Insert TikTok Post", "type": "main", "index": 0 }]] },
+    "Insert TikTok Post": { "main": [[{ "node": "Update Run: Completed", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{ "name": "HOOQ v2" }]
+}

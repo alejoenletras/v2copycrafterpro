@@ -1,0 +1,512 @@
+{
+  "name": "HOOQ v2 — WF2: Profile Enrichment (IG + TikTok)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "b2000001-0001-0001-0001-000000000001",
+      "name": "Schedule: Every 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "or", "value": "(ig_status.eq.pending,tiktok_status.eq.pending)" },
+            { "name": "limit", "value": "20" },
+            { "name": "select", "value": "*" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000002",
+      "name": "Get Pending Competitors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convertir array de resultados en items individuales\nconst data = $input.first().json;\nif (Array.isArray(data)) {\n  return data.map(c => ({ json: c }));\n}\nreturn [{ json: { _empty: true } }];"
+      },
+      "id": "b2000001-0001-0001-0001-000000000003",
+      "name": "Split Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ig_status }}",
+              "rightValue": "pending",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-0001-0001-000000000010",
+      "name": "IF: IG Pending",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apify~facebook-pages-scraper/runs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"startUrls\": [{ \"url\": \"{{ $json.fb_page_url }}\" }],\n  \"maxPages\": 1\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "b2000001-0001-0001-0001-000000000011",
+      "name": "Apify: FB Page Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 60]
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "b2000001-0001-0001-0001-000000000012",
+      "name": "Wait FB Page",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1320, 60]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $('Apify: FB Page Info').item.json.data.defaultDatasetId }}/items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000013",
+      "name": "Get FB Page Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 60]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer Instagram handle de los datos de la página de Facebook\nconst pageData = $input.first().json;\nconst competitor = $('IF: IG Pending').first().json;\nlet igHandle = null;\nlet igUrl = null;\n\n// Buscar en diferentes formatos de respuesta de Apify\nconst items = Array.isArray(pageData) ? pageData : [pageData];\nfor (const item of items) {\n  // Buscar en social links\n  const socialLinks = item.socialLinks || item.social_links || {};\n  if (socialLinks.instagram) {\n    igUrl = socialLinks.instagram;\n    const match = igUrl.match(/instagram\\.com\\/([^/?]+)/);\n    if (match) igHandle = match[1];\n  }\n  // Buscar en connected_instagram\n  if (!igHandle && item.connected_instagram) {\n    igHandle = item.connected_instagram.replace('@', '');\n    igUrl = `https://www.instagram.com/${igHandle}`;\n  }\n  // Buscar en about / info\n  if (!igHandle && item.about) {\n    const igMatch = item.about.match(/instagram\\.com\\/([a-zA-Z0-9_.]+)/);\n    if (igMatch) {\n      igHandle = igMatch[1];\n      igUrl = `https://www.instagram.com/${igHandle}`;\n    }\n  }\n}\n\nreturn [{\n  json: {\n    competitor_id: competitor.id,\n    ig_found: !!igHandle,\n    ig_handle: igHandle,\n    ig_profile_url: igUrl\n  }\n}];"
+      },
+      "id": "b2000001-0001-0001-0001-000000000014",
+      "name": "Extract IG Handle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 60]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ig_found }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-0001-0001-000000000015",
+      "name": "IF: IG Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1980, 60]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $json.competitor_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"ig_handle\": \"{{ $json.ig_handle }}\",\n  \"ig_profile_url\": \"{{ $json.ig_profile_url }}\",\n  \"ig_status\": \"found\",\n  \"ig_enriched_at\": \"{{ $now.toISO() }}\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000016",
+      "name": "Update: IG Found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, -40]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $json.competitor_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"ig_status\": \"not_found\",\n  \"ig_enriched_at\": \"{{ $now.toISO() }}\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000017",
+      "name": "Update: IG Not Found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.tiktok_status }}",
+              "rightValue": "pending",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-0001-0001-000000000020",
+      "name": "IF: TikTok Pending",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/clockworks~tiktok-scraper/runs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"searchQueries\": [\"{{ $json.fb_page_name }}\"],\n  \"resultsPerPage\": 3,\n  \"searchSection\": \"users\"\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "b2000001-0001-0001-0001-000000000021",
+      "name": "Apify: TikTok Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 460]
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "b2000001-0001-0001-0001-000000000022",
+      "name": "Wait TikTok",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1320, 460]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $('Apify: TikTok Search').item.json.data.defaultDatasetId }}/items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000023",
+      "name": "Get TikTok Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar datos para validación con Haiku\nconst results = $input.first().json;\nconst competitor = $('IF: TikTok Pending').first().json;\nconst profiles = Array.isArray(results) ? results : [results];\n\nif (!profiles.length || profiles[0]._empty) {\n  return [{ json: { competitor_id: competitor.id, tiktok_found: false, match: false } }];\n}\n\n// Tomar el primer perfil encontrado\nconst profile = profiles[0];\nconst handle = profile.uniqueId || profile.author?.uniqueId || profile.username || '';\nconst nickname = profile.nickname || profile.author?.nickname || '';\n\nreturn [{\n  json: {\n    competitor_id: competitor.id,\n    fb_page_name: competitor.fb_page_name,\n    tiktok_handle: handle,\n    tiktok_nickname: nickname,\n    tiktok_profile_url: handle ? `https://www.tiktok.com/@${handle}` : '',\n    has_result: !!handle\n  }\n}];"
+      },
+      "id": "b2000001-0001-0001-0001-000000000024",
+      "name": "Prepare TikTok Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 460]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_result }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-0001-0001-000000000025",
+      "name": "IF: TikTok Has Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1980, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 10,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"¿Este perfil de TikTok corresponde a esta marca de Facebook? Responde SOLO 'yes' o 'no'.\\n\\nMarca Facebook: {{ $json.fb_page_name }}\\nPerfil TikTok: @{{ $json.tiktok_handle }} ({{ $json.tiktok_nickname }})\"\n  }]\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "b2000001-0001-0001-0001-000000000026",
+      "name": "Haiku: Validate Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear respuesta de Haiku\nconst response = $input.first().json;\nconst prev = $('IF: TikTok Has Result').first().json;\nconst text = response.content?.[0]?.text?.toLowerCase().trim() || '';\nconst isMatch = text.includes('yes');\n\nreturn [{\n  json: {\n    competitor_id: prev.competitor_id,\n    match: isMatch,\n    tiktok_handle: prev.tiktok_handle,\n    tiktok_profile_url: prev.tiktok_profile_url\n  }\n}];"
+      },
+      "id": "b2000001-0001-0001-0001-000000000027",
+      "name": "Parse Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.match }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        }
+      },
+      "id": "b2000001-0001-0001-0001-000000000028",
+      "name": "IF: TikTok Match",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2640, 360]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $json.competitor_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tiktok_handle\": \"{{ $json.tiktok_handle }}\",\n  \"tiktok_profile_url\": \"{{ $json.tiktok_profile_url }}\",\n  \"tiktok_status\": \"found\",\n  \"tiktok_enriched_at\": \"{{ $now.toISO() }}\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000029",
+      "name": "Update: TikTok Found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 260]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $json.competitor_id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tiktok_status\": \"not_found\",\n  \"tiktok_enriched_at\": \"{{ $now.toISO() }}\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000030",
+      "name": "Update: TikTok Not Found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 460]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $('IF: TikTok Pending').first().json.id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tiktok_status\": \"not_found\",\n  \"tiktok_enriched_at\": \"{{ $now.toISO() }}\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "b2000001-0001-0001-0001-000000000031",
+      "name": "Update: TikTok No Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 560]
+    }
+  ],
+  "connections": {
+    "Schedule: Every 6h": { "main": [[{ "node": "Get Pending Competitors", "type": "main", "index": 0 }]] },
+    "Get Pending Competitors": { "main": [[{ "node": "Split Items", "type": "main", "index": 0 }]] },
+    "Split Items": { "main": [[
+      { "node": "IF: IG Pending", "type": "main", "index": 0 },
+      { "node": "IF: TikTok Pending", "type": "main", "index": 0 }
+    ]] },
+    "IF: IG Pending": {
+      "main": [
+        [{ "node": "Apify: FB Page Info", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Apify: FB Page Info": { "main": [[{ "node": "Wait FB Page", "type": "main", "index": 0 }]] },
+    "Wait FB Page": { "main": [[{ "node": "Get FB Page Data", "type": "main", "index": 0 }]] },
+    "Get FB Page Data": { "main": [[{ "node": "Extract IG Handle", "type": "main", "index": 0 }]] },
+    "Extract IG Handle": { "main": [[{ "node": "IF: IG Found", "type": "main", "index": 0 }]] },
+    "IF: IG Found": {
+      "main": [
+        [{ "node": "Update: IG Found", "type": "main", "index": 0 }],
+        [{ "node": "Update: IG Not Found", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF: TikTok Pending": {
+      "main": [
+        [{ "node": "Apify: TikTok Search", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Apify: TikTok Search": { "main": [[{ "node": "Wait TikTok", "type": "main", "index": 0 }]] },
+    "Wait TikTok": { "main": [[{ "node": "Get TikTok Results", "type": "main", "index": 0 }]] },
+    "Get TikTok Results": { "main": [[{ "node": "Prepare TikTok Validation", "type": "main", "index": 0 }]] },
+    "Prepare TikTok Validation": { "main": [[{ "node": "IF: TikTok Has Result", "type": "main", "index": 0 }]] },
+    "IF: TikTok Has Result": {
+      "main": [
+        [{ "node": "Haiku: Validate Match", "type": "main", "index": 0 }],
+        [{ "node": "Update: TikTok No Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Haiku: Validate Match": { "main": [[{ "node": "Parse Validation", "type": "main", "index": 0 }]] },
+    "Parse Validation": { "main": [[{ "node": "IF: TikTok Match", "type": "main", "index": 0 }]] },
+    "IF: TikTok Match": {
+      "main": [
+        [{ "node": "Update: TikTok Found", "type": "main", "index": 0 }],
+        [{ "node": "Update: TikTok Not Found", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{ "name": "HOOQ v2" }]
+}

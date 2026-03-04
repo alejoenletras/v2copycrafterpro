@@ -1,0 +1,202 @@
+{
+  "name": "HOOQ v2 — WF1: Facebook Ads + Competitor Upsert",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1000001-0001-0001-0001-000000000001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "hooq-fb-ads-v2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer configuración del webhook\nconst input = $input.first().json;\nreturn [{\n  json: {\n    keyword: input.keyword || input.niche || '',\n    search_mode: input.search_mode || 'keyword',\n    search_query: input.search_query || input.keyword || '',\n    page_url: input.page_url || '',\n    max_ads: input.max_ads || 20,\n    dna_expert: input.dna_expert || '',\n    dna_audience: input.dna_audience || '',\n    dna_product: input.dna_product || '',\n    objective: input.objective || '',\n    cta: input.cta || '',\n    telegram_chat_id: input.telegram_chat_id || '',\n    email: input.email || '',\n    likes_threshold: 1000\n  }\n}];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000002",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/curious_coder~facebook-ads-library-scraper/runs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"search_query\": \"{{ $json.search_query }}\",\n  \"country\": \"CO\",\n  \"max_ads\": {{ $json.max_ads }},\n  \"media_type\": \"all\"\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000003",
+      "name": "Apify: Scrape FB Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "a1000001-0001-0001-0001-000000000004",
+      "name": "Wait Apify",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $('Apify: Scrape FB Ads').item.json.data.defaultDatasetId }}/items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $env.APIFY_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000005",
+      "name": "Get Apify Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizar ads y extraer datos de competidores\nconst items = $input.all();\nconst ads = [];\nconst competitors = new Map();\nconst keyword = $('Config').first().json.keyword;\nconst threshold = $('Config').first().json.likes_threshold;\n\nfor (const item of items) {\n  const ad = item.json;\n  const pageName = ad.page_name || ad.advertiser_name || ad.snapshot?.page_name || '';\n  const pageId = ad.page_id || ad.snapshot?.page_id || '';\n  const pageUrl = ad.page_url || (pageId ? `https://www.facebook.com/${pageId}` : '');\n  const pageLikes = ad.page_likes || ad.page_info?.likes || 0;\n  \n  // Filtrar por likes\n  if (pageLikes < threshold && threshold > 0) continue;\n  \n  const adText = ad.ad_creative_body || ad.snapshot?.body?.text || ad.body || '';\n  if (!adText || adText.length < 20) continue;\n  \n  // Agregar ad normalizado\n  ads.push({\n    ad_id: ad.id || ad.ad_id || '',\n    page_name: pageName,\n    page_url: pageUrl,\n    page_id: pageId,\n    ad_text: adText,\n    headline: ad.ad_creative_title || ad.snapshot?.title || '',\n    cta_text: ad.ad_creative_link_caption || '',\n    start_date: ad.ad_delivery_start_time || ad.start_date || null,\n    platform: ad.publisher_platform?.[0] || 'facebook',\n    video_url: ad.video_url || ad.snapshot?.videos?.[0]?.video_url || null,\n    image_url: ad.image_url || ad.snapshot?.images?.[0]?.original_image_url || null,\n    page_likes: pageLikes\n  });\n  \n  // Agregar competidor único\n  if (pageId && !competitors.has(pageId)) {\n    competitors.set(pageId, {\n      fb_page_name: pageName,\n      fb_page_url: pageUrl,\n      fb_page_id: pageId,\n      source_keyword: keyword\n    });\n  }\n}\n\nreturn [{\n  json: {\n    ads: ads,\n    competitors: Array.from(competitors.values()),\n    total_ads: ads.length,\n    total_competitors: competitors.size\n  }\n}];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000006",
+      "name": "Normalize + Extract Competitors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Crear items individuales por cada competidor para upsert\nconst data = $input.first().json;\nconst competitors = data.competitors || [];\n\nreturn competitors.map(c => ({ json: c }));"
+      },
+      "id": "a1000001-0001-0001-0001-000000000007",
+      "name": "Split Competitors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/competitor_profiles",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fb_page_name\": \"{{ $json.fb_page_name }}\",\n  \"fb_page_url\": \"{{ $json.fb_page_url }}\",\n  \"fb_page_id\": \"{{ $json.fb_page_id }}\",\n  \"source_keyword\": \"{{ $json.source_keyword }}\",\n  \"last_scraped_at\": \"{{ $now.toISO() }}\",\n  \"updated_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000008",
+      "name": "Upsert Competitor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar ads para pipeline-model-ads\nconst data = $('Normalize + Extract Competitors').first().json;\nconst config = $('Config').first().json;\n\nreturn [{\n  json: {\n    ads: data.ads,\n    dna_expert: config.dna_expert,\n    dna_audience: config.dna_audience,\n    dna_product: config.dna_product,\n    objective: config.objective,\n    cta: config.cta,\n    max_retries: 2,\n    min_quality_score: 70\n  }\n}];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000009",
+      "name": "Prepare Pipeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/functions/v1/pipeline-model-ads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000010",
+      "name": "Pipeline Model Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatear resultado para respuesta\nconst pipeline = $input.first().json;\nconst config = $('Config').first().json;\nconst normData = $('Normalize + Extract Competitors').first().json;\n\nreturn [{\n  json: {\n    success: true,\n    keyword: config.keyword,\n    total_ads_scraped: normData.total_ads,\n    total_competitors: normData.total_competitors,\n    scripts: pipeline.scripts || [],\n    stats: pipeline.stats || {},\n    message: `Procesados ${normData.total_ads} ads de ${normData.total_competitors} competidores`\n  }\n}];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000011",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 460]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "a1000001-0001-0001-0001-000000000012",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2200, 460]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Apify: Scrape FB Ads", "type": "main", "index": 0 }]] },
+    "Apify: Scrape FB Ads": { "main": [[{ "node": "Wait Apify", "type": "main", "index": 0 }]] },
+    "Wait Apify": { "main": [[{ "node": "Get Apify Results", "type": "main", "index": 0 }]] },
+    "Get Apify Results": { "main": [[{ "node": "Normalize + Extract Competitors", "type": "main", "index": 0 }]] },
+    "Normalize + Extract Competitors": { "main": [[
+      { "node": "Split Competitors", "type": "main", "index": 0 },
+      { "node": "Prepare Pipeline", "type": "main", "index": 0 }
+    ]] },
+    "Split Competitors": { "main": [[{ "node": "Upsert Competitor", "type": "main", "index": 0 }]] },
+    "Prepare Pipeline": { "main": [[{ "node": "Pipeline Model Ads", "type": "main", "index": 0 }]] },
+    "Pipeline Model Ads": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{ "name": "HOOQ v2" }]
+}
