@@ -18,7 +18,7 @@ import type { AgentResult, ModeledScript } from '@/types';
 
 // ─── N8N Webhook ────────────────────────────────────────────────────────────
 
-const N8N_WEBHOOK_URL = 'https://primary-production-4e652.up.railway.app/webhook/hooq-fb-ads-v2';
+const N8N_WEBHOOK_URL = 'https://primary-production-4e652.up.railway.app/webhook/hooq-agent';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
