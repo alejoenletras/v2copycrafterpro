@@ -621,12 +621,16 @@ export default function AdsAgentPage() {
                 )}
                 {stats && (
                   <div className="flex gap-2 text-xs">
-                    <Badge variant="outline">
-                      Score prom: {stats.average_quality_score}/100
-                    </Badge>
-                    <Badge variant="outline">
-                      Tiempo: {Math.round(stats.processing_time_ms / 1000)}s
-                    </Badge>
+                    {stats.average_quality_score != null && (
+                      <Badge variant="outline">
+                        Score prom: {stats.average_quality_score}/100
+                      </Badge>
+                    )}
+                    {stats.processing_time_ms != null && !isNaN(stats.processing_time_ms) && (
+                      <Badge variant="outline">
+                        Tiempo: {Math.round(stats.processing_time_ms / 1000)}s
+                      </Badge>
+                    )}
                   </div>
                 )}
               </div>
