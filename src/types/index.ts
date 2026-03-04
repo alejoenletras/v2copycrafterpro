@@ -509,3 +509,36 @@ export interface VideoInspiration {
   created_at: string;
   updated_at: string;
 }
+
+// ─── Ads Agent Chat ──────────────────────────────────────────────────────────
+
+export type AdObjective = 'captacion' | 'agitacion' | 'remarketing' | 'compra' | 'reconocimiento';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  scripts?: ModeledScript[];
+  buttons?: Array<{ label: string; value: string }>;
+  isLoading?: boolean;
+  pipelineStatus?: string;
+  attachments?: Array<{ name: string; content: string }>;
+}
+
+export interface AgentChatResponse {
+  message: string;
+  action?: {
+    type: 'execute';
+    params: {
+      search_query: string;
+      search_mode: 'keyword' | 'brand';
+      countries: string[];
+      max_ads: number;
+      objective: AdObjective;
+      cta: string;
+      modeling_instructions: string;
+    };
+  } | null;
+  suggested_buttons?: Array<{ label: string; value: string }>;
+}
