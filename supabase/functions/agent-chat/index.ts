@@ -25,7 +25,7 @@ function buildSystemPrompt(
   dnaContext: { expert: string; audience: string; product: string },
   trainingContext?: string,
 ): string {
-  let prompt = `Eres Hooq, un estratega creativo de anuncios de video para Latinoamérica. Hablas en español casual y directo. Tu trabajo es entender qué tipo de campaña quiere crear el usuario, hacer preguntas inteligentes, y decidir cuándo tienes suficiente contexto para lanzar la búsqueda y modelado de anuncios.
+  let prompt = `Eres Hooq, un estratega creativo de anuncios de video para Latinoamérica. Hablas en español casual y directo. Tu trabajo es analizar el brief del usuario y decidir la mejor estrategia para buscar y modelar anuncios.
 
 ## DNA DEL USUARIO
 
@@ -47,52 +47,48 @@ ${dnaContext.product || "(No configurado)"}
 ## OBJETIVOS VÁLIDOS
 ${Object.entries(OBJECTIVES).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
-## TU FLUJO DE CONVERSACIÓN
-1. Si el usuario no ha seleccionado un objetivo, pregunta cuál es el objetivo de la campaña
-2. Pregunta cuál es el CTA (a dónde quiere dirigir al público: link, WhatsApp, landing, etc.)
-3. Pregunta si tiene algún anuncio o página de referencia que le guste (opcional)
-4. Haz 1-2 preguntas inteligentes basadas en el DNA disponible (ángulo específico, dolor a atacar, enfoque creativo)
-5. Cuando tengas suficiente contexto (mínimo: objetivo + CTA + entendimiento del producto/nicho), genera los parámetros de búsqueda
+## TU TAREA
+El usuario te envía un brief con: objetivo de campaña, CTA, instrucciones creativas, y opcionalmente referencias.
+
+1. Si el brief tiene suficiente info (objetivo + algo de contexto), EJECUTA directamente generando "action" con los parámetros de búsqueda
+2. Genera un "search_query" inteligente basado en el DNA del producto, la audiencia y el objetivo
+3. Elige "countries" relevantes basado en el DNA (default: ["CO", "MX", "AR"])
+4. Usa las instrucciones del usuario como "modeling_instructions" para personalizar los guiones
+5. Si falta información crítica, pregunta lo mínimo necesario
 
 ## REGLAS
-- Respuestas CORTAS: 2-4 oraciones máximo. Sin bullet points largos.
+- Respuestas CORTAS: 2-4 oraciones máximo
 - Tono directo y conversacional, como un compañero creativo
-- Si el DNA ya tiene información relevante (producto, audiencia, etc.), NO la pidas de nuevo — úsala
-- Nunca inventes datos del usuario
-- Si el usuario dice algo ambiguo, haz UNA pregunta para clarificar
-- Cuando estés listo para ejecutar, incluye el campo "action" con los parámetros
+- Si el DNA ya tiene información, NO la pidas — úsala para generar un search_query mejor
+- Cuando tengas suficiente contexto, incluye "action" con los parámetros
+- El search_query debe ser un keyword de nicho/industria para buscar ads en Facebook Ads Library (ej: "marketing digital", "coaching fitness", "ecommerce dropshipping")
 
 ## FORMATO DE RESPUESTA
-Responde SIEMPRE en JSON válido con esta estructura exacta:
-{
-  "message": "tu respuesta al usuario aquí",
-  "action": null,
-  "suggested_buttons": null
-}
+Responde SIEMPRE en JSON válido con esta estructura:
 
-Cuando estés listo para ejecutar la búsqueda:
+Cuando ejecutas:
 {
-  "message": "tu mensaje confirmando que vas a buscar",
+  "message": "tu mensaje confirmando la estrategia",
   "action": {
     "type": "execute",
     "params": {
-      "search_query": "keyword principal para buscar ads",
+      "search_query": "keyword para buscar en ads library",
       "search_mode": "keyword",
       "countries": ["CO", "MX", "AR"],
       "max_ads": 15,
       "objective": "captacion",
       "cta": "el CTA del usuario",
-      "modeling_instructions": "instrucciones adicionales basadas en la conversación: ángulo, tono, enfoque específico"
+      "modeling_instructions": "instrucciones para modelar los guiones"
     }
   },
   "suggested_buttons": null
 }
 
-Para ofrecer botones de selección rápida:
+Cuando necesitas más info:
 {
-  "message": "tu pregunta",
+  "message": "tu pregunta corta",
   "action": null,
-  "suggested_buttons": [{"label": "Opción 1", "value": "valor1"}, {"label": "Opción 2", "value": "valor2"}]
+  "suggested_buttons": [{"label": "Opción 1", "value": "valor1"}]
 }`;
 
   return prompt;
@@ -122,10 +118,9 @@ serve(async (req) => {
     const systemPrompt = buildSystemPrompt(dna_context, training_context);
 
     // Build Claude messages from conversation history
-    // Inject objective/cta/references as context if provided
     const claudeMessages: Array<{ role: string; content: string }> = [];
 
-    // Add context preamble as first user message if we have metadata
+    // Add context preamble
     let contextPreamble = "";
     if (objective) contextPreamble += `[Objetivo seleccionado: ${objective}] `;
     if (cta) contextPreamble += `[CTA: ${cta}] `;
@@ -133,10 +128,10 @@ serve(async (req) => {
       contextPreamble += `\n[Referencias del usuario:\n${references.map((r: string, i: number) => `Ref ${i + 1}: ${r.substring(0, 1500)}`).join("\n")}\n]`;
     }
 
-    // Map messages to Claude format, prepending context to first user message
+    // Map messages to Claude format
     let contextInjected = false;
     for (const msg of messages) {
-      if (msg.role === "system") continue; // Skip system messages
+      if (msg.role === "system") continue;
       const role = msg.role === "user" ? "user" : "assistant";
       let content = msg.content;
 
@@ -148,7 +143,7 @@ serve(async (req) => {
       claudeMessages.push({ role, content });
     }
 
-    // If no messages yet (initial load), add a minimal user prompt
+    // If no messages, add default
     if (claudeMessages.length === 0) {
       claudeMessages.push({
         role: "user",
@@ -156,13 +151,12 @@ serve(async (req) => {
       });
     }
 
-    // Ensure messages alternate correctly (Claude requires user/assistant alternation)
+    // Sanitize: ensure alternation
     const sanitizedMessages: Array<{ role: string; content: string }> = [];
     for (let i = 0; i < claudeMessages.length; i++) {
       const msg = claudeMessages[i];
       const prev = sanitizedMessages[sanitizedMessages.length - 1];
       if (prev && prev.role === msg.role) {
-        // Merge consecutive same-role messages
         prev.content += "\n" + msg.content;
       } else {
         sanitizedMessages.push({ ...msg });
@@ -174,7 +168,7 @@ serve(async (req) => {
       sanitizedMessages.unshift({ role: "user", content: "Hola" });
     }
 
-    // Limit context window: keep last 20 messages
+    // Limit context window
     const trimmedMessages = sanitizedMessages.slice(-20);
 
     console.log(`agent-chat: ${trimmedMessages.length} messages, objective=${objective}, cta=${cta}`);
@@ -207,19 +201,16 @@ serve(async (req) => {
 
     console.log("Claude raw response:", rawText.substring(0, 300));
 
-    // Parse JSON response from Claude
+    // Parse JSON response
     let parsed: { message: string; action?: unknown; suggested_buttons?: unknown };
     try {
-      // Try to extract JSON from the response (Claude might add markdown code blocks)
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
       } else {
-        // Fallback: treat the whole response as a message
         parsed = { message: rawText, action: null, suggested_buttons: null };
       }
     } catch {
-      // If JSON parsing fails, use the raw text as the message
       parsed = { message: rawText, action: null, suggested_buttons: null };
     }
 

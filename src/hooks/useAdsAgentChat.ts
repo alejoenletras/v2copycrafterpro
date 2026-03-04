@@ -17,20 +17,6 @@ function makeMsg(role: ChatMessage['role'], content: string, extra?: Partial<Cha
   };
 }
 
-const WELCOME_MESSAGE: ChatMessage = makeMsg(
-  'assistant',
-  '¡Hola! Soy Hooq, tu estratega creativo de anuncios. ¿Qué tipo de campaña vamos a crear hoy?',
-  {
-    buttons: [
-      { label: '🎯 Captación', value: 'captacion' },
-      { label: '🔥 Agitación', value: 'agitacion' },
-      { label: '🔄 Remarketing', value: 'remarketing' },
-      { label: '💰 Compra', value: 'compra' },
-      { label: '👁️ Reconocimiento', value: 'reconocimiento' },
-    ],
-  },
-);
-
 interface DnaContext {
   expert: string;
   audience: string;
@@ -40,11 +26,10 @@ interface DnaContext {
 export function useAdsAgentChat() {
   const { toast } = useToast();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pipelinePhase, setPipelinePhase] = useState<string | null>(null);
-  const [objective, setObjective] = useState<AdObjective | null>(null);
-  const [cta, setCta] = useState<string | null>(null);
+  const [generatedScripts, setGeneratedScripts] = useState<ModeledScript[]>([]);
 
   // DNA IDs
   const [personalityId, setPersonalityId] = useState('');
@@ -62,18 +47,16 @@ export function useAdsAgentChat() {
 
   const sendToAgent = useCallback(async (
     allMessages: ChatMessage[],
-    currentObjective: AdObjective | null,
-    currentCta: string | null,
-    references: Array<{ name: string; content: string }>,
+    objective: AdObjective | null,
+    ctaText: string | null,
+    references: string[],
   ): Promise<AgentChatResponse> => {
-    // Build DNA context
     const dnaContext: DnaContext = {
       expert: buildDnaStringRef.current(personalityId),
       audience: buildDnaStringRef.current(audienceId),
       product: buildDnaStringRef.current(productId),
     };
 
-    // Get training context
     let trainingContext = '';
     try {
       const trainingRes = await callEdge('get-training-context', {
@@ -84,7 +67,6 @@ export function useAdsAgentChat() {
       console.warn('Could not get training context:', err);
     }
 
-    // Build messages array for Claude
     const chatMessages = allMessages
       .filter(m => m.role !== 'system' && !m.isLoading)
       .map(m => ({ role: m.role, content: m.content }));
@@ -92,16 +74,16 @@ export function useAdsAgentChat() {
     const res = await callEdge('agent-chat', {
       messages: chatMessages,
       dna_context: dnaContext,
-      objective: currentObjective,
-      cta: currentCta,
-      references: references.map(r => `[${r.name}]\n${r.content}`),
+      objective,
+      cta: ctaText,
+      references,
       training_context: trainingContext,
     }, 45000);
 
     return res as AgentChatResponse;
   }, [personalityId, audienceId, productId]);
 
-  // ─── Execute pipeline (search → model → deliver) ─────────────────────────────
+  // ─── Execute pipeline (search → model) ────────────────────────────────────────
 
   const executePipeline = useCallback(async (params: {
     search_query: string;
@@ -119,7 +101,7 @@ export function useAdsAgentChat() {
     try {
       // Phase 1: Search
       setPipelinePhase('searching');
-      addSystemMsg('🔍 Buscando anuncios ganadores...');
+      addSystemMsg('Buscando anuncios ganadores...');
 
       const searchResult = await callEdge('search-winning-ads', {
         search_mode: params.search_mode,
@@ -131,18 +113,17 @@ export function useAdsAgentChat() {
       const ads = searchResult.ads || [];
       if (ads.length === 0) {
         setMessages(prev => [...prev, makeMsg('assistant',
-          `No encontré anuncios para "${params.search_query}". Prueba con otra palabra clave o amplía los países.`
+          `No encontre anuncios para "${params.search_query}". Prueba con otra palabra clave o amplia los paises.`
         )]);
         setPipelinePhase(null);
         return;
       }
 
-      addSystemMsg(`✅ ${ads.length} anuncios encontrados. Modelando guiones...`);
+      addSystemMsg(`${ads.length} anuncios encontrados. Modelando guiones con IA...`);
 
       // Phase 2: Model ads
       setPipelinePhase('modeling');
 
-      // Get training context for modeling
       let trainingCtx = '';
       try {
         const tc = await callEdge('get-training-context', {
@@ -150,10 +131,9 @@ export function useAdsAgentChat() {
         }, 15000);
         trainingCtx = tc.training_context || '';
       } catch {
-        // continue without training context
+        // continue without
       }
 
-      // Build ads in the format pipeline expects
       const pipelineAds = ads.map((ad: Record<string, unknown>) => ({
         source: String(ad.platform || 'facebook'),
         link: `https://facebook.com/ads/library/?id=${ad.ad_id || ''}`,
@@ -170,124 +150,146 @@ export function useAdsAgentChat() {
         dna_audience: buildDnaStringRef.current(audienceId),
         dna_product: buildDnaStringRef.current(productId),
         training_context: trainingCtx
-          ? `${trainingCtx}\n\nINSTRUCCIONES ADICIONALES DEL USUARIO:\n${params.modeling_instructions}`
+          ? `${trainingCtx}\n\nINSTRUCCIONES ADICIONALES:\n${params.modeling_instructions}`
           : params.modeling_instructions,
       }, 300000);
 
       const scripts: ModeledScript[] = modelResult.scripts || [];
+      setGeneratedScripts(scripts);
 
       if (scripts.length === 0) {
         setMessages(prev => [...prev, makeMsg('assistant',
-          'El pipeline no generó guiones. Puede ser que los anuncios encontrados no tuvieran suficiente texto para modelar.'
+          'El pipeline no genero guiones. Los anuncios encontrados no tenian suficiente texto para modelar.'
         )]);
-        setPipelinePhase(null);
-        return;
+      } else {
+        addSystemMsg(`${scripts.length} guiones generados.`);
+        setMessages(prev => [...prev, makeMsg('assistant',
+          `Listo! Genere **${scripts.length} guiones** basados en anuncios ganadores de "${params.search_query}". Revisalos y edita lo que necesites — cada correccion entrena mi estilo.`,
+          { scripts },
+        )]);
       }
 
-      // Phase 3: Done — show scripts in chat
       setPipelinePhase(null);
-      addSystemMsg(`✅ ${scripts.length} guiones modelados. Edita y corrige para entrenar la IA.`);
-
-      setMessages(prev => [...prev, makeMsg('assistant',
-        `¡Listo! Generé **${scripts.length} guiones** basados en anuncios ganadores de "${params.search_query}". Revísalos, edita lo que necesites — cada corrección entrena mi estilo.`,
-        { scripts },
-      )]);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setPipelinePhase(null);
       setMessages(prev => [...prev, makeMsg('assistant',
-        `Hubo un error en el pipeline: ${msg}. ¿Quieres intentar de nuevo?`
+        `Error en el pipeline: ${msg}`
       )]);
       toast({ variant: 'destructive', description: msg });
     }
   }, [personalityId, audienceId, productId, toast]);
 
-  // ─── Send user message ────────────────────────────────────────────────────────
+  // ─── Generate: main form submit ───────────────────────────────────────────────
 
-  const sendMessage = useCallback(async (
-    text: string,
-    attachments?: Array<{ name: string; content: string }>,
-  ) => {
+  const generate = useCallback(async (params: {
+    objective: AdObjective;
+    instructions: string;
+    ctaText: string;
+    references: string[];
+  }) => {
     if (isProcessing) return;
+    setIsProcessing(true);
+    setGeneratedScripts([]);
 
-    // Add user message
-    const userMsg = makeMsg('user', text, { attachments });
-    const newMessages = [...messages, userMsg];
+    // Build a comprehensive user message from all form fields
+    const parts: string[] = [];
+    parts.push(`Objetivo de campaña: ${params.objective}`);
+    if (params.ctaText) parts.push(`CTA: ${params.ctaText}`);
+    if (params.instructions) parts.push(`Instrucciones: ${params.instructions}`);
+    if (params.references.length > 0) {
+      parts.push(`Referencias:\n${params.references.map((r, i) => `${i + 1}. ${r}`).join('\n')}`);
+    }
+
+    const userContent = parts.join('\n');
+    const userMsg = makeMsg('user', userContent);
+    const newMessages = [userMsg];
     setMessages(newMessages);
 
     // Add loading bubble
     const loadingMsg = makeMsg('assistant', '', { isLoading: true });
     setMessages(prev => [...prev, loadingMsg]);
-    setIsProcessing(true);
 
     try {
       const response = await sendToAgent(
         newMessages,
-        objective,
-        cta,
-        attachments || [],
+        params.objective,
+        params.ctaText,
+        params.references,
       );
 
-      // Remove loading bubble
+      // Remove loading
       setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
 
-      // Add assistant response
+      // Add AI response
       const assistantMsg = makeMsg('assistant', response.message, {
         buttons: response.suggested_buttons || undefined,
       });
       setMessages(prev => [...prev, assistantMsg]);
 
-      // If action returned, execute pipeline
+      // If AI decided to execute pipeline directly
       if (response.action?.type === 'execute') {
-        const params = response.action.params;
-        // Update state
-        if (params.objective) setObjective(params.objective);
-        if (params.cta) setCta(params.cta);
-
-        await executePipeline(params);
+        await executePipeline(response.action.params);
       }
 
     } catch (err) {
-      // Remove loading bubble
       setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
       const msg = err instanceof Error ? err.message : String(err);
-      setMessages(prev => [...prev, makeMsg('assistant',
-        `Error de conexión: ${msg}. Intenta de nuevo.`,
-      )]);
+      setMessages(prev => [...prev, makeMsg('assistant', `Error: ${msg}`)]);
     } finally {
       setIsProcessing(false);
     }
-  }, [messages, isProcessing, objective, cta, sendToAgent, executePipeline]);
+  }, [isProcessing, sendToAgent, executePipeline]);
 
-  // ─── Quick button handler ─────────────────────────────────────────────────────
+  // ─── Send follow-up message in the chat ───────────────────────────────────────
 
-  const selectButton = useCallback((value: string) => {
-    // If it's an objective button
-    const objectives: AdObjective[] = ['captacion', 'agitacion', 'remarketing', 'compra', 'reconocimiento'];
-    if (objectives.includes(value as AdObjective)) {
-      setObjective(value as AdObjective);
+  const sendMessage = useCallback(async (text: string) => {
+    if (isProcessing || !text.trim()) return;
+    setIsProcessing(true);
+
+    const userMsg = makeMsg('user', text);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+
+    const loadingMsg = makeMsg('assistant', '', { isLoading: true });
+    setMessages(prev => [...prev, loadingMsg]);
+
+    try {
+      const response = await sendToAgent(newMessages, null, null, []);
+
+      setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
+      const assistantMsg = makeMsg('assistant', response.message, {
+        buttons: response.suggested_buttons || undefined,
+      });
+      setMessages(prev => [...prev, assistantMsg]);
+
+      if (response.action?.type === 'execute') {
+        await executePipeline(response.action.params);
+      }
+    } catch (err) {
+      setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
+      const msg = err instanceof Error ? err.message : String(err);
+      setMessages(prev => [...prev, makeMsg('assistant', `Error: ${msg}`)]);
+    } finally {
+      setIsProcessing(false);
     }
-    // Send as a regular message
-    sendMessage(value);
-  }, [sendMessage]);
+  }, [messages, isProcessing, sendToAgent, executePipeline]);
 
   // ─── Reset ────────────────────────────────────────────────────────────────────
 
   const resetChat = useCallback(() => {
-    setMessages([WELCOME_MESSAGE]);
+    setMessages([]);
     setIsProcessing(false);
     setPipelinePhase(null);
-    setObjective(null);
-    setCta(null);
+    setGeneratedScripts([]);
   }, []);
 
   return {
     messages,
     isProcessing,
     pipelinePhase,
-    objective,
-    cta,
+    generatedScripts,
     personalityId,
     audienceId,
     productId,
@@ -295,8 +297,8 @@ export function useAdsAgentChat() {
     setAudienceId,
     setProductId,
     setBuildDnaString,
+    generate,
     sendMessage,
-    selectButton,
     resetChat,
   };
 }
