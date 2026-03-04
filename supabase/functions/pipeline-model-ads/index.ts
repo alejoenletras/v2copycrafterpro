@@ -110,25 +110,57 @@ async function callClaude(
   return data.content?.[0]?.text ?? "";
 }
 
-// ─── JSON Parser (triple-layer fallback) ─────────────────────────────────────
+// ─── JSON Parser (robust multi-layer fallback) ──────────────────────────────
+
+function cleanJsonString(raw: string): string {
+  // Remove markdown code blocks
+  let s = raw.replace(/^```(?:json)?\s*\n?/g, "").replace(/\n?\s*```$/g, "").trim();
+  // Remove trailing commas before } or ]
+  s = s.replace(/,\s*([}\]])/g, "$1");
+  // Remove JS-style comments
+  s = s.replace(/\/\/[^\n]*/g, "");
+  return s;
+}
 
 function parseJsonResponse<T>(raw: string): T {
+  // Layer 1: direct parse
   try {
     return JSON.parse(raw);
-  } catch {
-    const stripped = raw
-      .replace(/^```(?:json)?\s*\n?/, "")
-      .replace(/\n?\s*```$/, "")
-      .trim();
+  } catch { /* fallthrough */ }
+
+  // Layer 2: clean and parse
+  const cleaned = cleanJsonString(raw);
+  try {
+    return JSON.parse(cleaned);
+  } catch { /* fallthrough */ }
+
+  // Layer 3: extract JSON object/array from text
+  const match = cleaned.match(/\{[\s\S]*\}/) || cleaned.match(/\[[\s\S]*\]/);
+  if (match) {
+    const extracted = match[0].replace(/,\s*([}\]])/g, "$1");
     try {
-      return JSON.parse(stripped);
-    } catch {
-      const match = raw.match(/\{[\s\S]*\}/) || raw.match(/\[[\s\S]*\]/);
-      if (match) {
-        return JSON.parse(match[0]);
-      }
-      throw new Error(`Could not parse JSON: ${raw.slice(0, 300)}`);
-    }
+      return JSON.parse(extracted);
+    } catch { /* fallthrough */ }
+  }
+
+  // Layer 4: try to fix truncated JSON (missing closing brackets)
+  let fixed = cleaned;
+  const opens = (fixed.match(/\{/g) || []).length;
+  const closes = (fixed.match(/\}/g) || []).length;
+  const openBrackets = (fixed.match(/\[/g) || []).length;
+  const closeBrackets = (fixed.match(/\]/g) || []).length;
+
+  // Remove any trailing partial string/value
+  fixed = fixed.replace(/,\s*"[^"]*$/, "");
+  fixed = fixed.replace(/,\s*$/, "");
+
+  for (let i = 0; i < openBrackets - closeBrackets; i++) fixed += "]";
+  for (let i = 0; i < opens - closes; i++) fixed += "}";
+
+  try {
+    return JSON.parse(fixed);
+  } catch (err) {
+    throw new Error(`Could not parse JSON: ${(err as Error).message} — raw: ${raw.slice(0, 300)}`);
   }
 }
 
@@ -182,7 +214,7 @@ ${ad.text}`;
   const raw = await callClaude(
     apiKey,
     "claude-sonnet-4-6",
-    2000,
+    4000,
     ANALYZE_SYSTEM_PROMPT,
     userMsg
   );
@@ -308,7 +340,7 @@ ${trainingContext ? trainingContext : ""}`;
   const raw = await callClaude(
     apiKey,
     "claude-opus-4-6",
-    2000,
+    3000,
     HOOKS_CTA_SYSTEM_PROMPT,
     userMsg
   );
@@ -380,7 +412,7 @@ ${fullScript}`;
   const raw = await callClaude(
     apiKey,
     "claude-sonnet-4-6",
-    1500,
+    4000,
     AUDIT_SYSTEM_PROMPT,
     userMsg
   );
