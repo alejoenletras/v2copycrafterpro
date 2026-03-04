@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Home, Loader2, Mic, Users, Package, ChevronDown,
   Mail, Send, AlertCircle, Sparkles, Zap, Bot,
-  CheckCircle2, Radio, ExternalLink, Camera,
+  CheckCircle2, Radio, ExternalLink, Camera, Target,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -25,21 +25,20 @@ const N8N_WEBHOOK_URL = 'https://primary-production-4e652.up.railway.app/webhook
 interface SearchConfig {
   search_mode: 'keyword' | 'brand';
   search_query: string;
-  countries: string[];
   max_ads: number;
   telegram_chat_id: string;
   email: string;
   schedule: 'manual' | 'daily' | 'weekly';
+  objective: string;
+  cta: string;
 }
 
-const COUNTRIES = [
-  { code: 'CO', label: 'Colombia' },
-  { code: 'MX', label: 'México' },
-  { code: 'AR', label: 'Argentina' },
-  { code: 'ES', label: 'España' },
-  { code: 'PE', label: 'Perú' },
-  { code: 'CL', label: 'Chile' },
-  { code: 'US', label: 'USA' },
+const OBJECTIVES = [
+  { value: 'captacion', label: 'Captación' },
+  { value: 'agitacion', label: 'Agitación' },
+  { value: 'remarketing', label: 'Remarketing' },
+  { value: 'venta', label: 'Venta' },
+  { value: 'reconocimiento', label: 'Reconocimiento' },
 ];
 
 const CONFIG_KEY = 'hooq_ads_agent_config';
@@ -112,8 +111,9 @@ export default function AdsAgentPage() {
   // Search config
   const [searchMode, setSearchMode] = useState<'keyword' | 'brand'>(saved.search_mode || 'keyword');
   const [searchQuery, setSearchQuery] = useState(saved.search_query || '');
-  const [selectedCountries, setSelectedCountries] = useState<string[]>(saved.countries || ['CO', 'MX', 'AR']);
   const [maxAds, setMaxAds] = useState(saved.max_ads || 20);
+  const [objective, setObjective] = useState(saved.objective || 'captacion');
+  const [ctaText, setCtaText] = useState(saved.cta || '');
 
   // Delivery
   const [telegramChatId, setTelegramChatId] = useState(saved.telegram_chat_id || '');
@@ -147,12 +147,6 @@ export default function AdsAgentPage() {
       if (first) setProductId(first.id);
     }
   }, [dnas]);
-
-  const toggleCountry = (code: string) => {
-    setSelectedCountries(prev =>
-      prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
-    );
-  };
 
   const buildDnaString = (dnaId: string): string => {
     const dna = dnas?.find(d => d.id === dnaId);
@@ -264,10 +258,6 @@ export default function AdsAgentPage() {
       toast({ variant: 'destructive', description: 'Ingresa una búsqueda' });
       return;
     }
-    if (selectedCountries.length === 0) {
-      toast({ variant: 'destructive', description: 'Selecciona al menos un país' });
-      return;
-    }
     if (!telegramChatId && !email) {
       toast({ variant: 'destructive', description: 'Configura al menos Telegram o email para recibir los guiones' });
       return;
@@ -275,7 +265,7 @@ export default function AdsAgentPage() {
 
     saveConfig({
       search_mode: searchMode, search_query: searchQuery,
-      countries: selectedCountries, max_ads: maxAds,
+      max_ads: maxAds, objective, cta: ctaText,
       telegram_chat_id: telegramChatId, email, schedule,
     });
 
@@ -295,7 +285,8 @@ export default function AdsAgentPage() {
           niche: searchQuery,
           search_mode: searchMode,
           page_url: searchMode === 'brand' ? searchQuery : undefined,
-          countries: selectedCountries,
+          objective,
+          cta: ctaText || undefined,
           max_ads: maxAds,
           dna_expert: buildDnaString(personalityId),
           dna_audience: buildDnaString(audienceId),
@@ -428,25 +419,40 @@ export default function AdsAgentPage() {
               />
             </div>
 
-            {/* Countries */}
+            {/* Objective */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Países</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                <Target className="w-3 h-3 inline mr-1" />Objetivo de campaña
+              </p>
               <div className="flex flex-wrap gap-1.5">
-                {COUNTRIES.map(c => (
+                {OBJECTIVES.map(o => (
                   <button
-                    key={c.code}
-                    onClick={() => toggleCountry(c.code)}
+                    key={o.value}
+                    onClick={() => setObjective(o.value)}
                     className={cn(
-                      'text-xs px-2 py-1 rounded-md border transition-all',
-                      selectedCountries.includes(c.code)
-                        ? 'bg-violet-100 border-violet-300 text-violet-700 font-medium'
-                        : 'border-border text-muted-foreground hover:border-violet-200',
+                      'text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-all',
+                      objective === o.value
+                        ? 'bg-violet-600 text-white border-violet-600'
+                        : 'border-border text-muted-foreground hover:border-violet-300',
                     )}
                   >
-                    {c.label}
+                    {o.label}
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* CTA */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                CTA (llamada a la acción)
+              </label>
+              <Input
+                value={ctaText}
+                onChange={e => setCtaText(e.target.value)}
+                placeholder="ej: Agenda tu llamada, Compra ahora, Link en bio..."
+                className="text-sm"
+              />
             </div>
 
             {/* Max ads */}
@@ -523,7 +529,7 @@ export default function AdsAgentPage() {
             {/* Schedule */}
             <ScheduleConfig
               keyword={searchQuery}
-              countries={selectedCountries}
+              countries={[]}
               maxAds={maxAds}
               dnaExpert={buildDnaString(personalityId)}
               dnaAudience={buildDnaString(audienceId)}
