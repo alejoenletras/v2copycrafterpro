@@ -203,7 +203,7 @@ export function useAdsAgentChat() {
       parts.push(`Referencias:\n${params.references.map((r, i) => `${i + 1}. ${r}`).join('\n')}`);
     }
     if (params.documents && params.documents.length > 0) {
-      parts.push(`Documentos adjuntos:\n${params.documents.map((d, i) => `--- ${d.name} ---\n${d.content}`).join('\n\n')}`);
+      parts.push(`Documentos adjuntos:\n${params.documents.map((d) => `--- ${d.name} ---\n${d.content}`).join('\n\n')}`);
     }
 
     const userContent = parts.join('\n');
@@ -222,35 +222,81 @@ export function useAdsAgentChat() {
         ...(params.documents || []).map(d => `[Documento: ${d.name}]\n${d.content}`),
       ];
 
-      const response = await sendToAgent(
-        newMessages,
-        params.objective,
-        params.ctaText,
-        allRefs,
-      );
+      // Step 1: Ask AI for strategic analysis + search_query
+      let pipelineParams: {
+        search_query: string;
+        search_mode: 'keyword' | 'brand';
+        countries: string[];
+        max_ads: number;
+        objective: AdObjective;
+        cta: string;
+        modeling_instructions: string;
+      } | null = null;
 
-      // Remove loading
-      setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
+      try {
+        const response = await sendToAgent(
+          newMessages,
+          params.objective,
+          params.ctaText,
+          allRefs,
+        );
 
-      // Add AI response
-      const assistantMsg = makeMsg('assistant', response.message, {
-        buttons: response.suggested_buttons || undefined,
-      });
-      setMessages(prev => [...prev, assistantMsg]);
+        // Remove loading
+        setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
 
-      // If AI decided to execute pipeline directly
-      if (response.action?.type === 'execute') {
-        await executePipeline(response.action.params);
+        // Show AI's strategic message
+        if (response.message) {
+          setMessages(prev => [...prev, makeMsg('assistant', response.message)]);
+        }
+
+        // Use AI's params if it returned execute action
+        if (response.action?.type === 'execute' && response.action.params?.search_query) {
+          pipelineParams = response.action.params;
+        }
+      } catch (aiErr) {
+        console.warn('Agent-chat failed, using fallback:', aiErr);
+        // Remove loading bubble
+        setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
       }
+
+      // Step 2: If AI didn't return params, build them from form data
+      if (!pipelineParams) {
+        // Extract search query from instructions or product DNA
+        const productDna = buildDnaStringRef.current(productId);
+        const fallbackQuery = params.instructions.trim().split(/\s+/).slice(0, 5).join(' ')
+          || productDna.split('\n')[0]?.replace(/^[^:]*:\s*/, '').trim()
+          || params.objective;
+
+        pipelineParams = {
+          search_query: fallbackQuery,
+          search_mode: 'keyword',
+          countries: ['CO', 'MX', 'AR'],
+          max_ads: 15,
+          objective: params.objective,
+          cta: params.ctaText || '',
+          modeling_instructions: [
+            params.instructions,
+            params.documents?.map(d => `[${d.name}]: ${d.content.substring(0, 2000)}`).join('\n'),
+          ].filter(Boolean).join('\n\n'),
+        };
+
+        setMessages(prev => [...prev, makeMsg('assistant',
+          `Voy a buscar anuncios con: **"${pipelineParams!.search_query}"**. Objetivo: ${params.objective}.`,
+        )]);
+      }
+
+      // Step 3: ALWAYS execute pipeline
+      await executePipeline(pipelineParams);
 
     } catch (err) {
       setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
       const msg = err instanceof Error ? err.message : String(err);
       setMessages(prev => [...prev, makeMsg('assistant', `Error: ${msg}`)]);
+      toast({ variant: 'destructive', description: msg });
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, sendToAgent, executePipeline]);
+  }, [isProcessing, sendToAgent, executePipeline, productId, toast]);
 
   // ─── Send follow-up message in the chat ───────────────────────────────────────
 
