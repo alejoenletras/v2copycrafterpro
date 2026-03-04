@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Loader2, AlertCircle, CheckCircle, Mic, Users, Package,
   ArrowRight, Dna, Zap, Sparkles, Bot, BookOpen, Video,
+  Activity, FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -309,6 +310,65 @@ export default function DashboardPage() {
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground/50 shrink-0 group-hover:text-violet-600 transition-colors" />
               </button>
+            </section>
+
+            {/* ── HOOQ v2: Multi-Plataforma ──────────────── */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-100 to-pink-100 flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4 text-fuchsia-600" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground">HOOQ v2</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Inteligencia multi-plataforma: competidores, posts orgánicos y ejecuciones.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  onClick={() => navigate('/competitors')}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-violet-200 bg-violet-50 hover:shadow-md transition-all text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4 text-violet-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-violet-700">Competidores</p>
+                    <p className="text-xs text-muted-foreground truncate">Perfiles FB + IG + TikTok</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                </button>
+
+                <button
+                  onClick={() => navigate('/organic-posts')}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-fuchsia-200 bg-fuchsia-50 hover:shadow-md transition-all text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-fuchsia-100 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-fuchsia-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-fuchsia-700">Posts Orgánicos</p>
+                    <p className="text-xs text-muted-foreground truncate">IG + TikTok analizados</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                </button>
+
+                <button
+                  onClick={() => navigate('/runs')}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:shadow-md transition-all text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                    <Activity className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-blue-700">Ejecuciones</p>
+                    <p className="text-xs text-muted-foreground truncate">Historial de scraping</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                </button>
+              </div>
             </section>
           </>
         )}

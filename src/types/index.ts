@@ -542,3 +542,64 @@ export interface AgentChatResponse {
   } | null;
   suggested_buttons?: Array<{ label: string; value: string }>;
 }
+
+// ===== HOOQ v2 — Multi-Platform Types =====
+
+export interface CompetitorProfile {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  fb_page_name: string;
+  fb_page_url: string | null;
+  fb_page_id: string | null;
+  ig_handle: string | null;
+  ig_profile_url: string | null;
+  ig_status: 'found' | 'not_found' | 'pending';
+  ig_enriched_at: string | null;
+  tiktok_handle: string | null;
+  tiktok_profile_url: string | null;
+  tiktok_status: 'found' | 'not_found' | 'pending';
+  tiktok_enriched_at: string | null;
+  source_keyword: string | null;
+  last_scraped_at: string | null;
+}
+
+export interface OrganicPost {
+  id: string;
+  created_at: string;
+  competitor_id: string;
+  competitor_name?: string;
+  platform: 'instagram' | 'tiktok';
+  post_type: 'video' | 'image' | 'carousel' | 'text';
+  post_url: string | null;
+  post_id: string | null;
+  posted_at: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  caption: string | null;
+  media_url: string | null;
+  thumbnail_url: string | null;
+  content_analysis: string | null;
+  rewritten_copy: string | null;
+  analyzed_at: string | null;
+}
+
+export interface ScrapeRun {
+  id: string;
+  started_at: string;
+  completed_at: string | null;
+  source: 'facebook_ads' | 'instagram' | 'tiktok';
+  keyword: string | null;
+  competitor_id: string | null;
+  competitor_name?: string;
+  max_results: number | null;
+  total_scraped: number;
+  total_filtered: number;
+  total_analyzed: number;
+  total_errors: number;
+  status: 'running' | 'completed' | 'failed' | 'partial';
+  error_message: string | null;
+  apify_cost_usd: number | null;
+}

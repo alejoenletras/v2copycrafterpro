@@ -9,6 +9,9 @@ import VslMakerPage from "./pages/VslMakerPage";
 import AdsAgentPage from "./pages/AdsAgentPage";
 import ReferencesPage from "./pages/ReferencesPage";
 import VideoInspirationPage from "./pages/VideoInspirationPage";
+import CompetitorsPage from "./pages/CompetitorsPage";
+import OrganicPostsPage from "./pages/OrganicPostsPage";
+import RunsPage from "./pages/RunsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +29,9 @@ const App = () => (
           <Route path="/ads-agent" element={<AdsAgentPage />} />
           <Route path="/references" element={<ReferencesPage />} />
           <Route path="/video-inspiration" element={<VideoInspirationPage />} />
+          <Route path="/competitors" element={<CompetitorsPage />} />
+          <Route path="/organic-posts" element={<OrganicPostsPage />} />
+          <Route path="/runs" element={<RunsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
