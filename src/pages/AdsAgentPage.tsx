@@ -2,14 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDNAs } from '@/hooks/useDNAs';
 import { useAdsAgentChat } from '@/hooks/useAdsAgentChat';
-import ChatBubble from '@/components/agent-chat/ChatBubble';
 import ScriptCard from '@/components/agent/ScriptCard';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import {
   Home, Bot, Loader2, Mic, Users, Package,
-  ChevronDown, Plus, X, Zap, Send, RotateCcw,
+  ChevronDown, Plus, X, Zap, RotateCcw,
   Info, Link as LinkIcon, FileText, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -99,7 +98,7 @@ function DnaSelector({ type, Icon, color, dnas, selectedId, onSelect }: {
 export default function AdsAgentPage() {
   const navigate = useNavigate();
   const { dnas } = useDNAs();
-  const chat = useAdsAgentChat();
+  const agent = useAdsAgentChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Form state
@@ -109,39 +108,38 @@ export default function AdsAgentPage() {
   const [references, setReferences] = useState<string[]>([]);
   const [newRef, setNewRef] = useState('');
   const [documents, setDocuments] = useState<Array<{ name: string; content: string }>>([]);
-  const [followUpText, setFollowUpText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-select first DNA of each type
   useEffect(() => {
     if (!dnas) return;
-    if (!chat.personalityId) {
+    if (!agent.personalityId) {
       const first = dnas.find(d => d.type === 'expert');
-      if (first) chat.setPersonalityId(first.id);
+      if (first) agent.setPersonalityId(first.id);
     }
-    if (!chat.audienceId) {
+    if (!agent.audienceId) {
       const first = dnas.find(d => d.type === 'audience');
-      if (first) chat.setAudienceId(first.id);
+      if (first) agent.setAudienceId(first.id);
     }
-    if (!chat.productId) {
+    if (!agent.productId) {
       const first = dnas.find(d => d.type === 'product');
-      if (first) chat.setProductId(first.id);
+      if (first) agent.setProductId(first.id);
     }
   }, [dnas]);
 
   // Wire DNA builder
   useEffect(() => {
-    chat.setBuildDnaString((id: string) => buildDnaString(dnas as any, id));
-  }, [dnas, chat.setBuildDnaString]);
+    agent.setBuildDnaString((id: string) => buildDnaString(dnas as any, id));
+  }, [dnas, agent.setBuildDnaString]);
 
-  // Auto-scroll
+  // Auto-scroll output panel
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.messages]);
+  }, [agent.generatedScripts, agent.statusMessages]);
 
   const handleGenerate = () => {
-    chat.generate({
+    agent.generate({
       objective: selectedObjective,
       instructions,
       ctaText,
@@ -154,12 +152,12 @@ export default function AdsAgentPage() {
     const files = e.target.files;
     if (!files) return;
     for (const file of Array.from(files)) {
-      if (file.size > 1_000_000) continue; // 1MB limit
+      if (file.size > 1_000_000) continue;
       try {
         const content = await file.text();
         setDocuments(prev => [...prev, {
           name: file.name,
-          content: content.substring(0, 10000), // 10k chars max per doc
+          content: content.substring(0, 10000),
         }]);
       } catch {
         // skip binary files
@@ -175,20 +173,7 @@ export default function AdsAgentPage() {
     setNewRef('');
   };
 
-  const handleFollowUp = () => {
-    if (!followUpText.trim()) return;
-    chat.sendMessage(followUpText);
-    setFollowUpText('');
-  };
-
-  const handleFollowUpKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleFollowUp();
-    }
-  };
-
-  const hasMessages = chat.messages.length > 0;
+  const hasResults = agent.generatedScripts.length > 0 || agent.statusMessages.length > 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -204,16 +189,16 @@ export default function AdsAgentPage() {
               <Bot className="w-4 h-4 text-violet-600" />
               <span className="font-semibold text-sm text-foreground">Agente de Anuncios</span>
             </div>
-            {chat.pipelinePhase && (
+            {agent.pipelinePhase && (
               <span className="text-xs px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 animate-pulse font-medium">
-                {chat.pipelinePhase === 'searching' ? 'Buscando anuncios...' :
-                 chat.pipelinePhase === 'modeling' ? 'Modelando guiones...' : chat.pipelinePhase}
+                {agent.pipelinePhase === 'searching' ? 'Buscando anuncios...' :
+                 agent.pipelinePhase === 'modeling' ? 'Modelando guiones...' : agent.pipelinePhase}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {hasMessages && (
-              <Button onClick={chat.resetChat} variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground">
+            {hasResults && (
+              <Button onClick={agent.resetChat} variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground">
                 <RotateCcw className="w-3.5 h-3.5" />
                 Nueva
               </Button>
@@ -239,9 +224,9 @@ export default function AdsAgentPage() {
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-2">Campaign DNA</label>
               <div className="flex gap-2">
-                <DnaSelector type="expert" Icon={Mic} color="text-violet-600" dnas={dnas || []} selectedId={chat.personalityId} onSelect={chat.setPersonalityId} />
-                <DnaSelector type="audience" Icon={Users} color="text-blue-600" dnas={dnas || []} selectedId={chat.audienceId} onSelect={chat.setAudienceId} />
-                <DnaSelector type="product" Icon={Package} color="text-emerald-600" dnas={dnas || []} selectedId={chat.productId} onSelect={chat.setProductId} />
+                <DnaSelector type="expert" Icon={Mic} color="text-violet-600" dnas={dnas || []} selectedId={agent.personalityId} onSelect={agent.setPersonalityId} />
+                <DnaSelector type="audience" Icon={Users} color="text-blue-600" dnas={dnas || []} selectedId={agent.audienceId} onSelect={agent.setAudienceId} />
+                <DnaSelector type="product" Icon={Package} color="text-emerald-600" dnas={dnas || []} selectedId={agent.productId} onSelect={agent.setProductId} />
               </div>
             </div>
 
@@ -264,7 +249,7 @@ export default function AdsAgentPage() {
               </div>
             </div>
 
-            {/* Instructions / Chat */}
+            {/* Instructions */}
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <label className="text-xs font-medium text-muted-foreground">Instrucciones y contenido extra</label>
@@ -273,12 +258,12 @@ export default function AdsAgentPage() {
               <Textarea
                 value={instructions}
                 onChange={e => setInstructions(e.target.value)}
-                placeholder={`Ejemplos:\n- "Usa este guión como base para crear un anuncio: [...]"\n- "Quiero un hook viral sobre marketing digital"\n- "Enfocate en el dolor de no tener clientes"\n- "Tono agresivo, tipo Grant Cardone"`}
+                placeholder={`Ejemplos:\n- "marketing digital"\n- "coaching fitness"\n- "ecommerce dropshipping"\n- "bienes raices"\n\nEscribe una palabra clave del nicho para buscar anuncios ganadores.`}
                 rows={6}
                 className="text-sm resize-y min-h-[140px]"
               />
               <p className="text-xs text-muted-foreground mt-1.5">
-                Escribe cualquier contenido, instrucciones o ideas que quieras convertir en anuncios.
+                Escribe la palabra clave del nicho para buscar anuncios en Facebook Ads Library.
               </p>
             </div>
 
@@ -359,9 +344,6 @@ export default function AdsAgentPage() {
                   ))}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Páginas de venta, anuncios que te gusten, YouTube, Reels, TikTok.
-              </p>
             </div>
 
             {/* CTA */}
@@ -381,10 +363,10 @@ export default function AdsAgentPage() {
             {/* Generate button */}
             <Button
               onClick={handleGenerate}
-              disabled={chat.isProcessing}
+              disabled={agent.isProcessing}
               className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2 h-11 text-sm font-semibold"
             >
-              {chat.isProcessing ? (
+              {agent.isProcessing ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Generando...</>
               ) : (
                 <><Zap className="w-4 h-4" /> Generar</>
@@ -393,12 +375,10 @@ export default function AdsAgentPage() {
           </div>
         </aside>
 
-        {/* ── Right Panel: Output / Chat ─────────────────────────────────────── */}
+        {/* ── Right Panel: Output (ScriptCards) ──────────────────────────────── */}
         <main className="flex-1 flex flex-col overflow-hidden bg-muted/20">
-
-          {/* Messages area */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
-            {!hasMessages ? (
+            {!hasResults ? (
               /* Empty state */
               <div className="flex flex-col items-center justify-center h-full py-24 px-8 text-center">
                 <div className="text-sm text-muted-foreground max-w-md space-y-4">
@@ -408,52 +388,46 @@ export default function AdsAgentPage() {
                     <strong>39%</strong> la Oferta, y solo <strong>20%</strong> el Copy.
                   </p>
                   <p className="text-xs text-muted-foreground/70">
-                    Configura tus DNAs, elige un objetivo, escribe tus instrucciones y genera.
+                    Configura tus DNAs, elige un objetivo, escribe una palabra clave del nicho y genera.
                   </p>
                 </div>
               </div>
             ) : (
-              /* Chat messages */
-              <div className="py-6 space-y-4">
-                {chat.messages.map((msg) => (
-                  <ChatBubble
-                    key={msg.id}
-                    message={msg}
-                    dnaExpertId={chat.personalityId}
-                  />
+              <div className="p-6 space-y-4">
+                {/* Status messages */}
+                {agent.statusMessages.map((msg, i) => (
+                  <div key={i} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-50 border border-violet-100">
+                    {agent.isProcessing && i === agent.statusMessages.length - 1 ? (
+                      <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin shrink-0" />
+                    ) : (
+                      <Bot className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                    )}
+                    <span className="text-sm text-violet-700">{msg}</span>
+                  </div>
                 ))}
+
+                {/* ScriptCards */}
+                {agent.generatedScripts.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-violet-600" />
+                      {agent.generatedScripts.length} Guiones Generados
+                    </h3>
+                    <p className="text-xs text-muted-foreground -mt-2">
+                      Edita cualquier guion y guarda la corrección — Hooq aprende de cada ajuste.
+                    </p>
+                    {agent.generatedScripts.map((script) => (
+                      <ScriptCard
+                        key={script.content_number}
+                        script={script}
+                        dnaExpertId={agent.personalityId}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
-
-          {/* Follow-up chat input (only visible after generation) */}
-          {hasMessages && (
-            <div className="border-t border-border bg-card px-4 py-3">
-              <div className="flex items-center gap-2">
-                <input
-                  value={followUpText}
-                  onChange={e => setFollowUpText(e.target.value)}
-                  onKeyDown={handleFollowUpKeyDown}
-                  disabled={chat.isProcessing}
-                  placeholder={chat.isProcessing ? 'Hooq está trabajando...' : 'Escribe para seguir la conversación...'}
-                  className="flex-1 text-sm border border-input rounded-xl px-4 py-2.5 bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 disabled:opacity-50"
-                />
-                <button
-                  onClick={handleFollowUp}
-                  disabled={chat.isProcessing || !followUpText.trim()}
-                  className={cn(
-                    'p-2.5 rounded-xl transition-all',
-                    followUpText.trim()
-                      ? 'bg-violet-600 text-white hover:bg-violet-700'
-                      : 'bg-muted text-muted-foreground',
-                    'disabled:opacity-50',
-                  )}
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
         </main>
       </div>
     </div>
