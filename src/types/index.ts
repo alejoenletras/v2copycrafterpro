@@ -510,6 +510,46 @@ export interface VideoInspiration {
   updated_at: string;
 }
 
+// ─── Ads Agent Rework ─────────────────────────────────────────────────────────
+
+export type AdSearchStatus = 'pending' | 'processing' | 'completed' | 'error';
+export type AdSearchType = 'keyword' | 'page_url';
+export type AdMediaFilter = 'all' | 'video' | 'image';
+
+export interface AdSearch {
+  id: string;
+  created_at: string;
+  search_type: AdSearchType;
+  query: string;
+  country_code: string;
+  media_type: AdMediaFilter;
+  status: AdSearchStatus;
+  total_results: number | null;
+  filtered_results: number | null;
+  error_message: string | null;
+  completed_at: string | null;
+}
+
+export interface Ad {
+  id: string;
+  search_id: string;
+  created_at: string;
+  ad_archive_id: string;
+  page_id: string;
+  page_name: string;
+  page_url: string | null;
+  page_likes: number | null;
+  ad_start_date: string;
+  days_active: number;
+  ad_type: 'video' | 'image' | 'text';
+  original_ad_copy: string | null;
+  media_url: string | null;
+  media_description: string | null;
+  summary: string | null;
+  rewritten_copy: string | null;
+  raw_data: Record<string, unknown> | null;
+}
+
 // ─── Ads Agent Chat ──────────────────────────────────────────────────────────
 
 export type AdObjective = 'captacion' | 'agitacion' | 'remarketing' | 'compra' | 'reconocimiento';

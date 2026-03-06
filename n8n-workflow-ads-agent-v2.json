@@ -1,0 +1,512 @@
+{
+  "name": "HOOQ Ads Agent v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hooq-ads-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "hooq-ads-v2"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $('Webhook').item.json.body.supabase_url }}/rest/v1/ad_searches?id=eq.{{ $('Webhook').item.json.body.search_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $('Webhook').item.json.body.supabase_service_key }}" },
+            { "name": "apikey", "value": "={{ $('Webhook').item.json.body.supabase_service_key }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"status\": \"processing\" }",
+        "options": {}
+      },
+      "id": "update-status-processing",
+      "name": "Status → Processing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Facebook Ads Library URL for Apify\nconst body = $('Webhook').item.json.body;\nconst searchType = body.search_type;\nconst query = body.query;\nconst country = body.country_code || 'ALL';\nconst mediaType = body.media_type || 'all';\n\nlet url;\nif (searchType === 'keyword') {\n  const encoded = encodeURIComponent(query);\n  url = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&media_type=${mediaType}&q=${encoded}&search_type=keyword_unordered`;\n} else {\n  // page_url — use directly\n  url = query.startsWith('http') ? query : `https://www.facebook.com/${query}`;\n}\n\nreturn [{\n  json: {\n    url,\n    search_id: body.search_id,\n    supabase_url: body.supabase_url,\n    supabase_service_key: body.supabase_service_key\n  }\n}];"
+      },
+      "id": "build-apify-url",
+      "name": "Build Apify URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/XtaWFhbtfxyzqrFmd/runs?token={{ $credentials.apifyToken }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"count\": 100,\n  \"scrapeAdDetails\": true,\n  \"urls\": [{ \"url\": \"{{ $('Build Apify URL').item.json.url }}\" }]\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "start-apify-run",
+      "name": "Start Apify Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "apify-cred",
+          "name": "Apify Token"
+        }
+      },
+      "notes": "Uses Apify actor XtaWFhbtfxyzqrFmd (Facebook Ad Library Scraper). Configure Apify token in N8N credentials."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wait for Apify run to complete and get results\nconst runData = $input.first().json;\nconst runId = runData.data?.id;\n\nif (!runId) {\n  throw new Error('No run ID returned from Apify: ' + JSON.stringify(runData));\n}\n\n// Poll for completion\nconst token = '{{ $credentials.apifyToken }}';\nlet status = runData.data.status;\nlet attempts = 0;\nconst maxAttempts = 60; // 5 minutes max\n\nwhile (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'ABORTED' && attempts < maxAttempts) {\n  await new Promise(r => setTimeout(r, 5000));\n  const res = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`);\n  const data = await res.json();\n  status = data.data.status;\n  attempts++;\n}\n\nif (status !== 'SUCCEEDED') {\n  throw new Error(`Apify run ${status} after ${attempts} attempts`);\n}\n\n// Get dataset items\nconst datasetId = runData.data.defaultDatasetId;\nconst itemsRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}&limit=100`);\nconst items = await itemsRes.json();\n\nreturn items.map(item => ({ json: item }));"
+      },
+      "id": "wait-apify-results",
+      "name": "Wait & Get Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter ads active 15+ days and extract key fields\nconst items = $input.all();\nconst now = new Date();\nconst filtered = [];\nlet totalCount = items.length;\n\nfor (const item of items) {\n  const ad = item.json;\n  \n  // Try to get start date\n  const startDateStr = ad.startDate || ad.start_date || ad.startDateFormatted || ad.start_date_formatted;\n  if (!startDateStr) continue; // skip if no date\n  \n  const startDate = new Date(startDateStr);\n  if (isNaN(startDate.getTime())) continue; // skip if invalid date\n  \n  const daysActive = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));\n  if (daysActive < 15) continue;\n  \n  // Determine ad type\n  const snapshot = ad.snapshot || {};\n  const hasVideo = snapshot.videos && snapshot.videos.length > 0 && snapshot.videos[0].video_sd_url;\n  const hasImage = snapshot.images && snapshot.images.length > 0 && snapshot.images[0].original_image_url;\n  const adType = hasVideo ? 'video' : hasImage ? 'image' : 'text';\n  \n  // Get media URL\n  let mediaUrl = null;\n  if (hasVideo) mediaUrl = snapshot.videos[0].video_sd_url;\n  else if (hasImage) mediaUrl = snapshot.images[0].original_image_url;\n  \n  filtered.push({\n    json: {\n      ad_archive_id: String(ad.adArchiveID || ad.ad_archive_id || ad.id || ''),\n      page_id: String(ad.pageID || ad.page_id || ''),\n      page_name: ad.pageName || ad.page_name || 'Unknown',\n      page_url: ad.pageAlias ? `https://facebook.com/${ad.pageAlias}` : null,\n      page_likes: ad.pageLikes || ad.page_likes || null,\n      ad_start_date: startDate.toISOString().split('T')[0],\n      days_active: daysActive,\n      ad_type: adType,\n      original_ad_copy: snapshot.body?.text || ad.ad_creative_bodies?.[0] || ad.body || null,\n      media_url: mediaUrl,\n      raw_data: ad,\n      // Pass through context\n      _search_id: $('Build Apify URL').first().json.search_id,\n      _supabase_url: $('Build Apify URL').first().json.supabase_url,\n      _supabase_service_key: $('Build Apify URL').first().json.supabase_service_key,\n      _total_count: totalCount\n    }\n  });\n}\n\nif (filtered.length === 0) {\n  // Return a single item with metadata to update status\n  return [{\n    json: {\n      _no_results: true,\n      _search_id: $('Build Apify URL').first().json.search_id,\n      _supabase_url: $('Build Apify URL').first().json.supabase_url,\n      _supabase_service_key: $('Build Apify URL').first().json.supabase_service_key,\n      _total_count: totalCount,\n      _filtered_count: 0\n    }\n  }];\n}\n\n// Add filtered count to first item\nfiltered[0].json._filtered_count = filtered.length;\n\nreturn filtered;"
+      },
+      "id": "filter-15-days",
+      "name": "Filter 15+ Days",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "no-results-check",
+              "leftValue": "={{ $json._no_results }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-no-results",
+      "name": "Has Results?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json._supabase_url }}/rest/v1/ad_searches?id=eq.{{ $json._search_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $json._supabase_service_key }}" },
+            { "name": "apikey", "value": "={{ $json._supabase_service_key }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"completed\",\n  \"total_results\": {{ $json._total_count }},\n  \"filtered_results\": 0,\n  \"completed_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "no-results-complete",
+      "name": "Complete (0 results)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"filtered\": 0 }",
+        "options": {}
+      },
+      "id": "respond-no-results",
+      "name": "Respond (0)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1960, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Processing started\" }",
+        "options": {}
+      },
+      "id": "respond-processing",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1740, 440]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-ads",
+      "name": "Loop Ads",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1960, 440]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-video",
+              "leftValue": "={{ $json.ad_type }}",
+              "rightValue": "video",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "switch-media-type",
+      "name": "Is Video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2180, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "key", "value": "={{ $credentials.googleGeminiApiKey }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      { \"text\": \"Analyze this advertisement media in detail. Include: the visual style, the product/service being promoted, the target audience it appeals to, the emotional tone, and any text visible. If it's a video, describe the narrative flow. Output only the analysis in Spanish.\" },\n      { \"file_data\": { \"mime_type\": \"{{ $json.ad_type === 'video' ? 'video/mp4' : 'image/jpeg' }}\", \"file_uri\": \"{{ $json.media_url }}\" } }\n    ]\n  }],\n  \"generationConfig\": { \"maxOutputTokens\": 1024 }\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "gemini-video",
+      "name": "Gemini (Video)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 340],
+      "notes": "Analyze video with Gemini 2.5 Flash. You need to add Google AI Studio API key as credential.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-image",
+              "leftValue": "={{ $json.ad_type }}",
+              "rightValue": "image",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "is-image-check",
+      "name": "Is Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2400, 540]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "key", "value": "={{ $credentials.googleGeminiApiKey }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      { \"text\": \"Analyze this advertisement image in detail. Include: the visual style, the product/service being promoted, the target audience it appeals to, the emotional tone, and any text visible in the image. Output only the analysis in Spanish.\" },\n      { \"inline_data\": { \"mime_type\": \"image/jpeg\", \"data\": \"\" } }\n    ]\n  }],\n  \"generationConfig\": { \"maxOutputTokens\": 1024 }\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "gemini-image",
+      "name": "Gemini (Image)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2620, 440],
+      "notes": "Analyze image with Gemini 2.5 Flash. For images, you may need to download and base64-encode them first.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge media description from Gemini back into the ad item\nconst ad = $('Loop Ads').item.json;\n\nlet mediaDescription = null;\n\n// Try to get Gemini response from video node\ntry {\n  const geminiRes = $input.first().json;\n  if (geminiRes.candidates && geminiRes.candidates[0]) {\n    mediaDescription = geminiRes.candidates[0].content?.parts?.[0]?.text || null;\n  }\n} catch(e) {\n  // No Gemini result available\n}\n\nreturn [{\n  json: {\n    ...ad,\n    media_description: mediaDescription\n  }\n}];"
+      },
+      "id": "merge-media-desc",
+      "name": "Merge Media Desc",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2840, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $credentials.anthropicApiKey }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5-20250929\",\n  \"max_tokens\": 500,\n  \"system\": \"You are an expert advertising analyst specializing in paid social media. You analyze competitor ads for strategic intelligence. Always respond in Spanish.\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Analyze this Facebook ad and produce a strategic summary.\\n\\nAD DATA:\\n- Page: {{ $json.page_name }}\\n- Original copy: {{ ($json.original_ad_copy || 'N/A').replace(/[\\\"\\n\\r]/g, ' ').substring(0, 1000) }}\\n- Media description: {{ ($json.media_description || 'N/A').replace(/[\\\"\\n\\r]/g, ' ').substring(0, 500) }}\\n- Days active: {{ $json.days_active }}\\n\\nOUTPUT FORMAT (respond ONLY with this JSON, no extra text):\\n{\\n  \\\"summary\\\": \\\"A 2-3 sentence strategic analysis: what the ad promotes, why it likely works (based on days active), and the key persuasion mechanism used.\\\"\\n}\"\n  }]\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "claude-sonnet-summary",
+      "name": "Claude Sonnet (Summary)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3060, 440],
+      "notes": "Uses Claude Sonnet 4.5 for strategic summary. Same Anthropic API key as Opus.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract summary from Claude Sonnet response\nconst ad = $('Merge Media Desc').item.json;\nlet summary = null;\n\ntry {\n  const res = $input.first().json;\n  const text = res.content?.[0]?.text || '';\n  // Try to parse JSON\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    const parsed = JSON.parse(match[0]);\n    summary = parsed.summary || null;\n  } else {\n    summary = text; // Use raw text as fallback\n  }\n} catch(e) {\n  // fallback\n}\n\nreturn [{\n  json: {\n    ...ad,\n    summary\n  }\n}];"
+      },
+      "id": "extract-summary",
+      "name": "Extract Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3280, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $credentials.anthropicApiKey }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 2000,\n  \"system\": \"You are a world-class direct-response copywriter. You rewrite ad copy maintaining the exact same persuasion structure, offer, and emotional triggers — but with completely fresh, human-sounding wording. You never fabricate claims or data that are not present in the original ad. Always write in the same language as the original.\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Rewrite this Facebook ad copy. Maintain the same persuasion structure, length, tone, and offer. Use fresh wording that sounds human, not AI-generated. Do NOT invent claims or data not in the original.\\n\\nORIGINAL AD COPY:\\n{{ ($json.original_ad_copy || 'No copy available').replace(/[\\\"\\n\\r]/g, ' ').substring(0, 2000) }}\\n\\nCONTEXT (for understanding, not for copying):\\n- Media description: {{ ($json.media_description || 'N/A').replace(/[\\\"\\n\\r]/g, ' ').substring(0, 500) }}\\n- Days active: {{ $json.days_active }} (this is a proven ad)\\n\\nOUTPUT FORMAT (respond ONLY with this JSON, no extra text):\\n{\\n  \\\"rewrittenAdCopy\\\": \\\"The rewritten version here.\\\"\\n}\"\n  }]\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "claude-opus-rewrite",
+      "name": "Claude Opus (Rewrite)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3500, 440],
+      "notes": "Uses Claude Opus 4.6 for copy rewriting. Same Anthropic API key.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract rewritten copy from Claude Opus response and prepare for Supabase\nconst ad = $('Extract Summary').item.json;\nlet rewrittenCopy = null;\n\ntry {\n  const res = $input.first().json;\n  const text = res.content?.[0]?.text || '';\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    const parsed = JSON.parse(match[0]);\n    rewrittenCopy = parsed.rewrittenAdCopy || parsed.rewritten_ad_copy || null;\n  } else {\n    rewrittenCopy = text;\n  }\n} catch(e) {\n  // fallback\n}\n\nreturn [{\n  json: {\n    search_id: ad._search_id,\n    ad_archive_id: ad.ad_archive_id,\n    page_id: ad.page_id,\n    page_name: ad.page_name,\n    page_url: ad.page_url,\n    page_likes: ad.page_likes,\n    ad_start_date: ad.ad_start_date,\n    days_active: ad.days_active,\n    ad_type: ad.ad_type,\n    original_ad_copy: ad.original_ad_copy,\n    media_url: ad.media_url,\n    media_description: ad.media_description,\n    summary: ad.summary,\n    rewritten_copy: rewrittenCopy,\n    raw_data: ad.raw_data,\n    // Keep context for later\n    _supabase_url: ad._supabase_url,\n    _supabase_service_key: ad._supabase_service_key,\n    _search_id: ad._search_id,\n    _total_count: ad._total_count,\n    _filtered_count: ad._filtered_count\n  }\n}];"
+      },
+      "id": "prepare-save",
+      "name": "Prepare Save",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3720, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._supabase_url }}/rest/v1/ads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $json._supabase_service_key }}" },
+            { "name": "apikey", "value": "={{ $json._supabase_service_key }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"search_id\": \"{{ $json.search_id }}\",\n  \"ad_archive_id\": \"{{ $json.ad_archive_id }}\",\n  \"page_id\": \"{{ $json.page_id }}\",\n  \"page_name\": {{ JSON.stringify($json.page_name) }},\n  \"page_url\": {{ $json.page_url ? JSON.stringify($json.page_url) : 'null' }},\n  \"page_likes\": {{ $json.page_likes || 'null' }},\n  \"ad_start_date\": \"{{ $json.ad_start_date }}\",\n  \"days_active\": {{ $json.days_active }},\n  \"ad_type\": \"{{ $json.ad_type }}\",\n  \"original_ad_copy\": {{ $json.original_ad_copy ? JSON.stringify($json.original_ad_copy) : 'null' }},\n  \"media_url\": {{ $json.media_url ? JSON.stringify($json.media_url) : 'null' }},\n  \"media_description\": {{ $json.media_description ? JSON.stringify($json.media_description) : 'null' }},\n  \"summary\": {{ $json.summary ? JSON.stringify($json.summary) : 'null' }},\n  \"rewritten_copy\": {{ $json.rewritten_copy ? JSON.stringify($json.rewritten_copy) : 'null' }}\n}",
+        "options": {}
+      },
+      "id": "save-to-supabase",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3940, 440],
+      "notes": "Upsert ad by ad_archive_id (Prefer: resolution=merge-duplicates)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// After loop completes, update search status to completed\nconst allItems = $('Prepare Save').all();\nconst first = allItems[0]?.json || {};\nconst searchId = first._search_id;\nconst supabaseUrl = first._supabase_url;\nconst serviceKey = first._supabase_service_key;\nconst totalCount = first._total_count || 0;\nconst filteredCount = first._filtered_count || allItems.length;\n\nreturn [{\n  json: {\n    search_id: searchId,\n    supabase_url: supabaseUrl,\n    supabase_service_key: serviceKey,\n    total_count: totalCount,\n    filtered_count: filteredCount\n  }\n}];"
+      },
+      "id": "prepare-final-update",
+      "name": "Prepare Final Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4160, 440],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.supabase_url }}/rest/v1/ad_searches?id=eq.{{ $json.search_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $json.supabase_service_key }}" },
+            { "name": "apikey", "value": "={{ $json.supabase_service_key }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"completed\",\n  \"total_results\": {{ $json.total_count }},\n  \"filtered_results\": {{ $json.filtered_count }},\n  \"completed_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "update-status-completed",
+      "name": "Status → Completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4380, 440]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Status → Processing", "type": "main", "index": 0 }]]
+    },
+    "Status → Processing": {
+      "main": [[{ "node": "Build Apify URL", "type": "main", "index": 0 }]]
+    },
+    "Build Apify URL": {
+      "main": [[{ "node": "Start Apify Run", "type": "main", "index": 0 }]]
+    },
+    "Start Apify Run": {
+      "main": [[{ "node": "Wait & Get Results", "type": "main", "index": 0 }]]
+    },
+    "Wait & Get Results": {
+      "main": [[{ "node": "Filter 15+ Days", "type": "main", "index": 0 }]]
+    },
+    "Filter 15+ Days": {
+      "main": [[{ "node": "Has Results?", "type": "main", "index": 0 }]]
+    },
+    "Has Results?": {
+      "main": [
+        [{ "node": "Complete (0 results)", "type": "main", "index": 0 }],
+        [{ "node": "Respond OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Complete (0 results)": {
+      "main": [[{ "node": "Respond (0)", "type": "main", "index": 0 }]]
+    },
+    "Respond OK": {
+      "main": [[{ "node": "Loop Ads", "type": "main", "index": 0 }]]
+    },
+    "Loop Ads": {
+      "main": [
+        [{ "node": "Prepare Final Update", "type": "main", "index": 0 }],
+        [{ "node": "Is Video?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Video?": {
+      "main": [
+        [{ "node": "Gemini (Video)", "type": "main", "index": 0 }],
+        [{ "node": "Is Image?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini (Video)": {
+      "main": [[{ "node": "Merge Media Desc", "type": "main", "index": 0 }]]
+    },
+    "Is Image?": {
+      "main": [
+        [{ "node": "Gemini (Image)", "type": "main", "index": 0 }],
+        [{ "node": "Merge Media Desc", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini (Image)": {
+      "main": [[{ "node": "Merge Media Desc", "type": "main", "index": 0 }]]
+    },
+    "Merge Media Desc": {
+      "main": [[{ "node": "Claude Sonnet (Summary)", "type": "main", "index": 0 }]]
+    },
+    "Claude Sonnet (Summary)": {
+      "main": [[{ "node": "Extract Summary", "type": "main", "index": 0 }]]
+    },
+    "Extract Summary": {
+      "main": [[{ "node": "Claude Opus (Rewrite)", "type": "main", "index": 0 }]]
+    },
+    "Claude Opus (Rewrite)": {
+      "main": [[{ "node": "Prepare Save", "type": "main", "index": 0 }]]
+    },
+    "Prepare Save": {
+      "main": [[{ "node": "Save to Supabase", "type": "main", "index": 0 }]]
+    },
+    "Save to Supabase": {
+      "main": [[{ "node": "Loop Ads", "type": "main", "index": 0 }]]
+    },
+    "Prepare Final Update": {
+      "main": [[{ "node": "Status → Completed", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [{ "name": "HOOQ" }],
+  "triggerCount": 1
+}

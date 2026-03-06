@@ -1,96 +1,198 @@
-import ScheduleConfig from '@/components/agent/ScheduleConfig';
-import ReferentProfiles from '@/components/agent/ReferentProfiles';
-import ScriptCard from '@/components/agent/ScriptCard';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDNAs } from '@/hooks/useDNAs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  Home, Loader2, Mic, Users, Package, ChevronDown,
-  Mail, Send, AlertCircle, Sparkles, Zap, Bot,
-  CheckCircle2, Radio, ExternalLink, Camera, Target,
+  Home, Loader2, ChevronDown, Search, Clock, CheckCircle2,
+  AlertCircle, Copy, Video, Image, FileText, Globe, Bot,
+  Play, XCircle, ChevronRight,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAdSearches } from '@/hooks/useAdSearches';
 import { cn } from '@/lib/utils';
-import type { AgentResult, ModeledScript } from '@/types';
+import type { Ad, AdSearch, AdSearchType, AdMediaFilter } from '@/types';
 
-// ─── N8N Webhook ────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-const N8N_WEBHOOK_URL = 'https://primary-production-4e652.up.railway.app/webhook/hooq-agent';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface SearchConfig {
-  search_mode: 'keyword' | 'brand';
-  search_query: string;
-  max_ads: number;
-  telegram_chat_id: string;
-  email: string;
-  schedule: 'manual' | 'daily' | 'weekly';
-  objective: string;
-  cta: string;
-}
-
-const OBJECTIVES = [
-  { value: 'captacion', label: 'Captación' },
-  { value: 'agitacion', label: 'Agitación' },
-  { value: 'remarketing', label: 'Remarketing' },
-  { value: 'venta', label: 'Venta' },
-  { value: 'reconocimiento', label: 'Reconocimiento' },
+const COUNTRIES = [
+  { code: 'ALL', label: 'Todos' },
+  { code: 'US', label: 'Estados Unidos' },
+  { code: 'MX', label: 'Mexico' },
+  { code: 'CO', label: 'Colombia' },
+  { code: 'ES', label: 'Espana' },
+  { code: 'AR', label: 'Argentina' },
+  { code: 'BR', label: 'Brasil' },
+  { code: 'UK', label: 'Reino Unido' },
+  { code: 'CA', label: 'Canada' },
+  { code: 'AU', label: 'Australia' },
+  { code: 'DE', label: 'Alemania' },
+  { code: 'FR', label: 'Francia' },
 ];
 
-const CONFIG_KEY = 'hooq_ads_agent_config';
+const MEDIA_TYPES: { value: AdMediaFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'video', label: 'Video' },
+  { value: 'image', label: 'Imagen' },
+];
 
-function loadConfig(): Partial<SearchConfig> {
-  try {
-    return JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}');
-  } catch { return {}; }
-}
+// ─── Ad Card ─────────────────────────────────────────────────────────────────
 
-function saveConfig(cfg: Partial<SearchConfig>) {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
-}
+function AdCard({ ad }: { ad: Ad }) {
+  const { toast } = useToast();
+  const [showOriginal, setShowOriginal] = useState(false);
 
-// ─── DNA Selector (small inline) ────────────────────────────────────────────
+  const handleCopy = () => {
+    if (ad.rewritten_copy) {
+      navigator.clipboard.writeText(ad.rewritten_copy);
+      toast({ description: 'Copy copiado al portapapeles' });
+    }
+  };
 
-interface DnaSelectorProps {
-  type: 'expert' | 'audience' | 'product';
-  label: string;
-  Icon: React.ElementType;
-  color: string;
-  dnas: Array<{ id: string; name: string; type: string }>;
-  selectedId: string;
-  onSelect: (id: string) => void;
-}
-
-function DnaSelector({ type, label, Icon, color, dnas, selectedId, onSelect }: DnaSelectorProps) {
-  const filtered = dnas.filter(d => d.type === type);
-  const selected = filtered.find(d => d.id === selectedId);
+  const typeIcon = ad.ad_type === 'video' ? Video : ad.ad_type === 'image' ? Image : FileText;
+  const TypeIcon = typeIcon;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-        <Icon className={cn('w-3 h-3', color)} /> {label}
-      </label>
-      <div className="relative">
-        <select
-          value={selectedId}
-          onChange={e => onSelect(e.target.value)}
-          className="w-full text-sm border border-input rounded-md px-3 py-2 bg-background appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">— Seleccionar —</option>
-          {filtered.map(d => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+    <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-sm text-foreground truncate">{ad.page_name}</span>
+            {ad.page_url && (
+              <a href={ad.page_url} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-muted-foreground hover:text-violet-600 transition-colors shrink-0">
+                Ver pagina
+              </a>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="gap-1 text-xs">
+              <TypeIcon className="w-3 h-3" />
+              {ad.ad_type}
+            </Badge>
+            <Badge
+              variant="secondary"
+              className={cn(
+                'text-xs',
+                ad.days_active >= 30 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+              )}
+            >
+              {ad.days_active} dias activo
+            </Badge>
+            {ad.page_likes && (
+              <span className="text-xs text-muted-foreground">{ad.page_likes.toLocaleString()} likes</span>
+            )}
+          </div>
+        </div>
       </div>
-      {selected && (
-        <span className="text-xs text-muted-foreground truncate pl-1">{selected.name}</span>
+
+      {/* Media preview */}
+      {ad.media_url && ad.ad_type === 'video' && (
+        <div className="relative rounded-lg overflow-hidden bg-muted aspect-video flex items-center justify-center">
+          <video src={ad.media_url} controls className="w-full h-full object-cover" preload="metadata" />
+        </div>
+      )}
+      {ad.media_url && ad.ad_type === 'image' && (
+        <div className="rounded-lg overflow-hidden bg-muted">
+          <img src={ad.media_url} alt="Ad media" className="w-full object-cover max-h-64" loading="lazy" />
+        </div>
+      )}
+
+      {/* Media description (AI) */}
+      {ad.media_description && (
+        <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+          <span className="font-medium text-foreground">Analisis visual: </span>
+          {ad.media_description}
+        </div>
+      )}
+
+      {/* Summary */}
+      {ad.summary && (
+        <div className="text-sm text-foreground bg-violet-50 border border-violet-100 rounded-lg p-3">
+          <span className="font-medium text-violet-700 text-xs block mb-1">Resumen estrategico</span>
+          {ad.summary}
+        </div>
+      )}
+
+      {/* Rewritten copy */}
+      {ad.rewritten_copy && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium text-emerald-700 text-xs">Copy reescrito</span>
+            <Button onClick={handleCopy} variant="ghost" size="sm" className="gap-1 h-7 text-xs text-emerald-700 hover:text-emerald-800">
+              <Copy className="w-3 h-3" /> Copiar
+            </Button>
+          </div>
+          <p className="text-sm text-emerald-900 whitespace-pre-wrap">{ad.rewritten_copy}</p>
+        </div>
+      )}
+
+      {/* Original copy (collapsible) */}
+      {ad.original_ad_copy && (
+        <div>
+          <button
+            onClick={() => setShowOriginal(!showOriginal)}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+          >
+            <ChevronRight className={cn('w-3 h-3 transition-transform', showOriginal && 'rotate-90')} />
+            Copy original
+          </button>
+          {showOriginal && (
+            <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">
+              {ad.original_ad_copy}
+            </p>
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+// ─── Search History Item ─────────────────────────────────────────────────────
+
+function SearchHistoryItem({ search, isActive, onSelect }: {
+  search: AdSearch; isActive: boolean; onSelect: () => void;
+}) {
+  const statusConfig: Record<string, { icon: typeof Clock; color: string; label: string }> = {
+    pending: { icon: Clock, color: 'text-gray-400', label: 'Pendiente' },
+    processing: { icon: Loader2, color: 'text-amber-500', label: 'Procesando' },
+    completed: { icon: CheckCircle2, color: 'text-emerald-500', label: 'Completado' },
+    error: { icon: XCircle, color: 'text-red-500', label: 'Error' },
+  };
+
+  const cfg = statusConfig[search.status] || statusConfig.pending;
+  const StatusIcon = cfg.icon;
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'w-full text-left p-3 rounded-lg border transition-all',
+        isActive
+          ? 'border-violet-300 bg-violet-50'
+          : 'border-border hover:border-violet-200 hover:bg-muted/50'
+      )}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <StatusIcon className={cn('w-3.5 h-3.5 shrink-0', cfg.color, search.status === 'processing' && 'animate-spin')} />
+        <span className="text-xs font-medium text-foreground truncate">{search.query}</span>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{search.search_type === 'keyword' ? 'Keyword' : 'Pagina'}</span>
+        <span>-</span>
+        <span>{search.country_code}</span>
+        {search.filtered_results != null && (
+          <>
+            <span>-</span>
+            <span>{search.filtered_results} ads</span>
+          </>
+        )}
+      </div>
+      <span className="text-xs text-muted-foreground/70">
+        {new Date(search.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      </span>
+    </button>
   );
 }
 
@@ -98,237 +200,40 @@ function DnaSelector({ type, label, Icon, color, dnas, selectedId, onSelect }: D
 
 export default function AdsAgentPage() {
   const navigate = useNavigate();
-  const { dnas } = useDNAs();
   const { toast } = useToast();
+  const {
+    searches, activeSearch, ads, isTriggering, isLoadingAds, isPolling,
+    triggerSearch, selectSearch,
+  } = useAdSearches();
 
-  const saved = loadConfig();
+  // Search form state
+  const [searchType, setSearchType] = useState<AdSearchType>('keyword');
+  const [query, setQuery] = useState('');
+  const [countryCode, setCountryCode] = useState('ALL');
+  const [mediaType, setMediaType] = useState<AdMediaFilter>('all');
 
-  // DNA selection
-  const [personalityId, setPersonalityId] = useState('');
-  const [audienceId, setAudienceId] = useState('');
-  const [productId, setProductId] = useState('');
+  // Ad filters
+  const [adTypeFilter, setAdTypeFilter] = useState<'all' | 'video' | 'image' | 'text'>('all');
+  const [minDaysFilter, setMinDaysFilter] = useState<number>(15);
 
-  // Search config
-  const [searchMode, setSearchMode] = useState<'keyword' | 'brand'>(saved.search_mode || 'keyword');
-  const [searchQuery, setSearchQuery] = useState(saved.search_query || '');
-  const [maxAds, setMaxAds] = useState(saved.max_ads || 20);
-  const [objective, setObjective] = useState(saved.objective || 'captacion');
-  const [ctaText, setCtaText] = useState(saved.cta || '');
-
-  // Delivery
-  const [telegramChatId, setTelegramChatId] = useState(saved.telegram_chat_id || '');
-  const [email, setEmail] = useState(saved.email || '');
-  const [schedule] = useState<'manual' | 'daily' | 'weekly'>(saved.schedule || 'manual');
-
-  // Referents
-  const [referentNames, setReferentNames] = useState<string[]>([]);
-
-  // State
-  const [isRunning, setIsRunning] = useState(false);
-  const [phase, setPhase] = useState<'idle' | 'working' | 'done'>('idle');
-  const [resultMessage, setResultMessage] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
-  const [generatedScripts, setGeneratedScripts] = useState<ModeledScript[]>([]);
-
-  // Auto-select first DNA of each type
-  useEffect(() => {
-    if (!dnas) return;
-    if (!personalityId) {
-      const first = dnas.find(d => d.type === 'expert');
-      if (first) setPersonalityId(first.id);
-    }
-    if (!audienceId) {
-      const first = dnas.find(d => d.type === 'audience');
-      if (first) setAudienceId(first.id);
-    }
-    if (!productId) {
-      const first = dnas.find(d => d.type === 'product');
-      if (first) setProductId(first.id);
-    }
-  }, [dnas]);
-
-  const buildDnaString = (dnaId: string): string => {
-    const dna = dnas?.find(d => d.id === dnaId);
-    if (!dna?.data) return '';
-    const d = dna.data as Record<string, any>;
-
-    const safeJoin = (val: any, sep = ', '): string => {
-      if (Array.isArray(val)) return val.join(sep) || 'No especificado';
-      if (typeof val === 'string') return val || 'No especificado';
-      return 'No especificado';
-    };
-
-    const safeList = (val: any, prefix = '- '): string[] => {
-      if (Array.isArray(val) && val.length > 0) return val.map((item: any) => `${prefix}${typeof item === 'string' ? item : JSON.stringify(item)}`);
-      if (typeof val === 'string' && val) return [`${prefix}${val}`];
-      return ['No especificado'];
-    };
-
-    if (dna.type === 'expert') {
-      const v = d.voice || {};
-      const s = d.story || {};
-      const b = d.beliefs || {};
-      return [
-        `=== VOZ DEL EXPERTO ===`,
-        `Nombre: ${v.name || 'No especificado'}`,
-        `Adjetivos de tono: ${safeJoin(v.adjectives)}`,
-        `Descripcion: ${v.description || 'No especificado'}`,
-        `Nivel de humor: ${v.humorLevel || 'No especificado'}`,
-        `Longitud de oraciones: ${v.sentenceLength || 'No especificado'}`,
-        `Lenguaje: ${v.useProfanity || 'No especificado'}`,
-        ``,
-        `=== HISTORIA DE TRANSFORMACION ===`,
-        `Punto mas bajo: ${s.lowestPoint || 'No especificado'}`,
-        `Descubrimiento/Punto de quiebre: ${s.breakthrough || 'No especificado'}`,
-        `Situacion actual: ${s.current || 'No especificado'}`,
-        `Credenciales: ${safeJoin(s.credentials, ' | ')}`,
-        ``,
-        `=== CREENCIAS Y PROMESA ===`,
-        `Creencias centrales: ${safeJoin(b.beliefs, ' | ')}`,
-        `Enemigo comun: ${b.commonEnemy || 'No especificado'}`,
-        `Promesa central: ${b.centralPromise || 'No especificado'}`,
-      ].join('\n');
-    }
-
-    if (dna.type === 'audience') {
-      const p = d.pains || {};
-      const des = d.desires || {};
-      const tr = des.tangibleResults || {};
-      const objs = Array.isArray(d.objections) ? d.objections : [];
-      return [
-        `=== NIVEL DE CONSCIENCIA ===`,
-        `Nivel: ${d.consciousnessLevel ?? 'No especificado'}`,
-        ``,
-        `=== DOLORES DEL AVATAR ===`,
-        `Economicos: ${safeJoin(p.economic, ' | ')}`,
-        `Emocionales: ${safeJoin(p.emotional, ' | ')}`,
-        `Sociales: ${safeJoin(p.social, ' | ')}`,
-        `De identidad: ${safeJoin(p.identity, ' | ')}`,
-        `Dolor primario: ${p.primary || 'No especificado'}`,
-        ``,
-        `=== DESEOS DEL AVATAR ===`,
-        `Transformacion de identidad: ${des.identityTransformation || 'No especificado'}`,
-        `Resultado economico: ${tr.economic || 'No especificado'}`,
-        `Estilo de vida: ${tr.lifestyle || 'No especificado'}`,
-        `Relaciones: ${tr.relationships || 'No especificado'}`,
-        `Marco temporal: ${des.timeframe || 'No especificado'}`,
-        ``,
-        `=== OBJECIONES REALES ===`,
-        ...(objs.length > 0
-          ? objs.map((o: any, i: number) => `Objecion ${i + 1}: "${o.exact_words || ''}" | Causa: ${o.root_cause || ''} | Destruccion: ${o.destruction || ''}`)
-          : ['No especificado']),
-      ].join('\n');
-    }
-
-    if (dna.type === 'product') {
-      const bonuses = Array.isArray(d.bonuses) ? d.bonuses : [];
-      const pp = d.paymentPlan || {};
-      return [
-        `=== PRODUCTO/SERVICIO ===`,
-        `Nombre: ${d.name || 'No especificado'}`,
-        `Precio: $${d.price || 'No especificado'}`,
-        ``,
-        `=== PROBLEMA Y SOLUCION ===`,
-        `Problema de la audiencia: ${d.audienceProblem || 'No especificado'}`,
-        `Solucion del producto: ${d.solution || 'No especificado'}`,
-        `Oferta de transformacion: ${d.transformationOffer || 'No especificado'}`,
-        ``,
-        `=== BENEFICIOS ===`,
-        ...safeList(d.benefitBullets),
-        ``,
-        `=== GARANTIA Y BONOS ===`,
-        `Garantia: ${d.guaranteePeriod ? d.guaranteePeriod + ' dias' : 'No especificado'} — ${d.guaranteeDescription || ''}`,
-        ...(bonuses.length > 0 ? bonuses.map((b: any) => `Bono: ${b.name} (valor $${b.value})`) : []),
-        ...(pp.enabled ? [`Plan de pagos: ${pp.installments} cuotas de $${pp.installmentPrice}`] : []),
-        ``,
-        `=== KEYWORDS ===`,
-        `${safeJoin(d.keywords)}`,
-      ].join('\n');
-    }
-
-    return Object.entries(d)
-      .filter(([, v]) => v !== null && v !== undefined && v !== '')
-      .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
-      .join('\n');
-  };
-
-  const handleRun = async () => {
-    if (!searchQuery.trim()) {
-      toast({ variant: 'destructive', description: 'Ingresa una búsqueda' });
+  const handleSearch = async () => {
+    if (!query.trim()) {
+      toast({ variant: 'destructive', description: 'Ingresa un keyword o URL' });
       return;
     }
-    if (!telegramChatId && !email) {
-      toast({ variant: 'destructive', description: 'Configura al menos Telegram o email para recibir los guiones' });
-      return;
-    }
-
-    saveConfig({
-      search_mode: searchMode, search_query: searchQuery,
-      max_ads: maxAds, objective, cta: ctaText,
-      telegram_chat_id: telegramChatId, email, schedule,
+    await triggerSearch({
+      search_type: searchType,
+      query: query.trim(),
+      country_code: countryCode,
+      media_type: mediaType,
     });
-
-    setIsRunning(true);
-    setError(null);
-    setResultMessage('');
-    setGeneratedScripts([]);
-    setAgentResult(null);
-    setPhase('working');
-
-    try {
-      const response = await fetch(N8N_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keyword: searchQuery,
-          niche: searchQuery,
-          search_mode: searchMode,
-          page_url: searchMode === 'brand' ? searchQuery : undefined,
-          objective,
-          cta: ctaText || undefined,
-          max_ads: maxAds,
-          dna_expert: buildDnaString(personalityId),
-          dna_audience: buildDnaString(audienceId),
-          dna_product: buildDnaString(productId),
-          telegram_chat_id: telegramChatId,
-          email: email || undefined,
-          referentes: referentNames.length > 0 ? referentNames : undefined,
-        }),
-        signal: AbortSignal.timeout(300000),
-      });
-
-      const result: AgentResult = await response.json();
-
-      if (result.success) {
-        setPhase('done');
-        setResultMessage(result.message || 'Scripts generados y enviados');
-        setAgentResult(result);
-        setGeneratedScripts(result.scripts || []);
-        toast({ description: result.message || 'Scripts enviados' });
-      } else {
-        throw new Error((result as any).error || result.message || 'Error en el agente');
-      }
-
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-      setPhase('idle');
-      toast({ variant: 'destructive', description: msg });
-    } finally {
-      setIsRunning(false);
-    }
   };
 
-  const handleNewSearch = () => {
-    setPhase('idle');
-    setResultMessage('');
-    setGeneratedScripts([]);
-    setAgentResult(null);
-  };
-
-  const pc = agentResult?.platformCounts;
-  const stats = agentResult?.stats;
+  const filteredAds = ads.filter(ad => {
+    if (adTypeFilter !== 'all' && ad.ad_type !== adTypeFilter) return false;
+    if (ad.days_active < minDaysFilter) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -343,402 +248,297 @@ export default function AdsAgentPage() {
             <Bot className="w-4 h-4 text-violet-600" />
             <span className="font-semibold text-sm text-foreground">Agente de Anuncios</span>
           </div>
-          <Badge variant="secondary" className="ml-2 text-xs">N8N</Badge>
+          <Badge variant="secondary" className="ml-2 text-xs">v2</Badge>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* ── Left panel: Config ──────────────────────────────────────────── */}
+        {/* ── Left panel: Search Form + History ─────────────────────────────── */}
         <aside className="w-80 shrink-0 border-r border-border bg-card overflow-y-auto">
           <div className="p-4 space-y-5">
-
-            {/* DNA Selection */}
+            {/* Search Type Toggle */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">DNA del Experto</p>
-              <div className="space-y-3">
-                <DnaSelector type="expert" label="Personalidad" Icon={Mic} color="text-violet-600"
-                  dnas={dnas || []} selectedId={personalityId} onSelect={setPersonalityId} />
-                <DnaSelector type="audience" label="Audiencia" Icon={Users} color="text-blue-600"
-                  dnas={dnas || []} selectedId={audienceId} onSelect={setAudienceId} />
-                <DnaSelector type="product" label="Producto" Icon={Package} color="text-emerald-600"
-                  dnas={dnas || []} selectedId={productId} onSelect={setProductId} />
-              </div>
-            </div>
-
-            <div className="border-t border-border" />
-
-            {/* Referent Profiles */}
-            <ReferentProfiles onReferentsChange={setReferentNames} />
-
-            <div className="border-t border-border" />
-
-            {/* Search Mode */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Modo de búsqueda</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Tipo de busqueda</p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSearchMode('keyword')}
+                  onClick={() => setSearchType('keyword')}
                   className={cn(
                     'flex-1 text-xs py-2 px-3 rounded-lg border font-medium transition-all',
-                    searchMode === 'keyword'
+                    searchType === 'keyword'
                       ? 'bg-violet-600 text-white border-violet-600'
                       : 'border-border text-muted-foreground hover:border-violet-300',
                   )}
                 >
-                  Por nicho
+                  Por Keyword
                 </button>
                 <button
-                  onClick={() => setSearchMode('brand')}
+                  onClick={() => setSearchType('page_url')}
                   className={cn(
                     'flex-1 text-xs py-2 px-3 rounded-lg border font-medium transition-all',
-                    searchMode === 'brand'
+                    searchType === 'page_url'
                       ? 'bg-violet-600 text-white border-violet-600'
                       : 'border-border text-muted-foreground hover:border-violet-300',
                   )}
                 >
-                  Por marca
+                  Por Pagina
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {searchMode === 'keyword'
-                  ? 'Busca anuncios por palabra clave (ej: "marketing digital", "pérdida de peso")'
-                  : 'Busca anuncios de una marca por URL o nombre de su fan page'}
-              </p>
             </div>
 
-            {/* Search Input */}
+            {/* Query Input */}
             <div>
               <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                {searchMode === 'keyword' ? 'Palabra clave / nicho' : 'Nombre o URL de la fan page'}
+                {searchType === 'keyword' ? 'Keyword' : 'URL de pagina de Facebook'}
               </label>
               <Input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder={searchMode === 'keyword' ? 'ej: marketing digital, adelgazar...' : 'ej: SaleADS o facebook.com/SaleADS'}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={searchType === 'keyword' ? 'ej: AI Automation, marketing digital...' : 'ej: https://facebook.com/SaleADS'}
                 className="text-sm"
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
               />
             </div>
 
-            {/* Objective */}
+            {/* Country */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                <Target className="w-3 h-3 inline mr-1" />Objetivo de campaña
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {OBJECTIVES.map(o => (
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1.5">
+                <Globe className="w-3 h-3" /> Pais
+              </label>
+              <div className="relative">
+                <select
+                  value={countryCode}
+                  onChange={e => setCountryCode(e.target.value)}
+                  className="w-full text-sm border border-input rounded-md px-3 py-2 bg-background appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {COUNTRIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Media Type */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">Tipo de media</p>
+              <div className="flex gap-2">
+                {MEDIA_TYPES.map(mt => (
                   <button
-                    key={o.value}
-                    onClick={() => setObjective(o.value)}
+                    key={mt.value}
+                    onClick={() => setMediaType(mt.value)}
                     className={cn(
-                      'text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-all',
-                      objective === o.value
+                      'flex-1 text-xs py-2 px-3 rounded-lg border font-medium transition-all',
+                      mediaType === mt.value
                         ? 'bg-violet-600 text-white border-violet-600'
                         : 'border-border text-muted-foreground hover:border-violet-300',
                     )}
                   >
-                    {o.label}
+                    {mt.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* CTA */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                CTA (llamada a la acción)
-              </label>
-              <Input
-                value={ctaText}
-                onChange={e => setCtaText(e.target.value)}
-                placeholder="ej: Agenda tu llamada, Compra ahora, Link en bio..."
-                className="text-sm"
-              />
-            </div>
-
-            {/* Max ads */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                Cantidad de anuncios: <span className="text-foreground font-semibold">{maxAds}</span>
-              </label>
-              <input
-                type="range" min={5} max={30} step={5} value={maxAds}
-                onChange={e => setMaxAds(Number(e.target.value))}
-                className="w-full accent-violet-600"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
-                <span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30</span>
-              </div>
-            </div>
-
-            <div className="border-t border-border" />
-
-            {/* Delivery */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Entrega de guiones</p>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1.5">
-                    <Send className="w-3 h-3 text-sky-500" /> Chat ID de Telegram
-                  </label>
-                  <Input
-                    value={telegramChatId}
-                    onChange={e => setTelegramChatId(e.target.value)}
-                    placeholder="-100123456789"
-                    className="text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1.5">
-                    <Mail className="w-3 h-3 text-emerald-500" /> Email de entrega
-                  </label>
-                  <Input
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="tu@email.com"
-                    className="text-xs"
-                    type="email"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-border" />
-
-            {/* CTA Button */}
+            {/* Search Button */}
             <Button
-              onClick={handleRun}
-              disabled={isRunning || !searchQuery.trim()}
+              onClick={handleSearch}
+              disabled={isTriggering || isPolling || !query.trim()}
               className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2"
             >
-              {isRunning ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Agente trabajando...</>
+              {isTriggering ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Iniciando...</>
+              ) : isPolling ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Buscando...</>
               ) : (
-                <><Zap className="w-4 h-4" />Lanzar Agente</>
+                <><Search className="w-4 h-4" />Buscar Anuncios</>
               )}
             </Button>
 
-            {error && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-                <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                <span>{error}</span>
+            {/* Polling status */}
+            {isPolling && activeSearch && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <span>
+                  {activeSearch.status === 'pending' ? 'En cola...' : 'Procesando anuncios...'}
+                </span>
               </div>
             )}
 
             <div className="border-t border-border" />
 
-            {/* Schedule */}
-            <ScheduleConfig
-              keyword={searchQuery}
-              countries={[]}
-              maxAds={maxAds}
-              dnaExpert={buildDnaString(personalityId)}
-              dnaAudience={buildDnaString(audienceId)}
-              dnaProduct={buildDnaString(productId)}
-              telegramChatId={telegramChatId}
-              email={email}
-            />
-          </div>
-        </aside>
-
-        {/* ── Right panel: Results ──────────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto bg-muted/20">
-
-          {phase === 'working' && (
-            <div className="flex flex-col items-center justify-center h-full py-24 px-8 text-center">
-              <div className="w-20 h-20 rounded-2xl bg-violet-100 flex items-center justify-center mb-6 animate-pulse">
-                <Bot className="w-10 h-10 text-violet-600" />
-              </div>
-              <h2 className="font-semibold text-lg text-foreground mb-3">El agente está trabajando...</h2>
-              <div className="space-y-2 text-sm text-muted-foreground max-w-md">
-                <div className="flex items-center gap-2 justify-center">
-                  <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
-                  <span>Buscando anuncios ganadores en Facebook, Instagram + TikTok</span>
-                </div>
-                <p className="text-xs mt-4 text-muted-foreground/70">
-                  Esto puede tardar 3-5 minutos. El agente busca, filtra por criterio de ganadores,
-                  analiza la estructura, modela los guiones sección por sección, y audita la calidad.
-                </p>
-              </div>
-              <div className="mt-8 grid grid-cols-5 gap-4 text-xs text-muted-foreground">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Radio className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <span>FB Ads</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
-                    <Camera className="w-4 h-4 text-fuchsia-600" />
-                  </div>
-                  <span>Instagram</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
-                    <ExternalLink className="w-4 h-4 text-pink-600" />
-                  </div>
-                  <span>TikTok</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-violet-600" />
-                  </div>
-                  <span>Claude IA</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <Send className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <span>Entrega</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {phase === 'done' && (
-            <div className="p-6 space-y-6">
-              {/* Summary header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    Agente completado
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">{resultMessage}</p>
-                </div>
-                <Button onClick={handleNewSearch} variant="outline" size="sm" className="gap-1 text-xs">
-                  <Zap className="w-3 h-3" /> Nueva búsqueda
-                </Button>
-              </div>
-
-              {/* Stats bar */}
-              <div className="flex flex-wrap gap-3">
-                {pc && (
-                  <div className="flex gap-2 text-xs">
-                    <Badge variant="secondary" className="gap-1">
-                      <Radio className="w-3 h-3 text-blue-600" /> FB: {pc.facebook}
-                    </Badge>
-                    <Badge variant="secondary" className="gap-1">
-                      <Camera className="w-3 h-3 text-fuchsia-600" /> IG: {pc.instagram}
-                    </Badge>
-                    <Badge variant="secondary" className="gap-1">
-                      <ExternalLink className="w-3 h-3 text-pink-600" /> TK: {pc.tiktok}
-                    </Badge>
-                  </div>
-                )}
-                {stats && (
-                  <div className="flex gap-2 text-xs">
-                    {stats.average_quality_score != null && (
-                      <Badge variant="outline">
-                        Score prom: {stats.average_quality_score}/100
-                      </Badge>
-                    )}
-                    {stats.processing_time_ms != null && !isNaN(stats.processing_time_ms) && (
-                      <Badge variant="outline">
-                        Tiempo: {Math.round(stats.processing_time_ms / 1000)}s
-                      </Badge>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Warnings */}
-              {agentResult?.warnings && agentResult.warnings.length > 0 && (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-1">
-                  {agentResult.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-amber-700 flex items-center gap-1.5">
-                      <AlertCircle className="w-3 h-3 shrink-0" /> {w}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {/* Delivery confirmations */}
-              <div className="flex gap-3">
-                {telegramChatId && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sky-50 border border-sky-200 text-xs">
-                    <Send className="w-3.5 h-3.5 text-sky-600" />
-                    <span className="text-sky-800">Telegram enviado</span>
-                  </div>
-                )}
-                {email && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
-                    <Mail className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-emerald-800">Email enviado</span>
-                  </div>
-                )}
-                {agentResult?.docUrl && (
-                  <a
-                    href={agentResult.docUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-200 text-xs hover:bg-violet-100 transition-colors"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 text-violet-600" />
-                    <span className="text-violet-800">Abrir Google Doc</span>
-                  </a>
-                )}
-              </div>
-
-              {/* Generated scripts */}
-              {generatedScripts.length > 0 && (
-                <div className="space-y-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Guiones generados ({generatedScripts.length}) — Edita y corrige para entrenar la IA
-                  </p>
-                  {generatedScripts.map((script) => (
-                    <ScriptCard
-                      key={script.content_number}
-                      script={script}
-                      dnaExpertId={personalityId}
+            {/* Search History */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Busquedas recientes</p>
+              {searches.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No hay busquedas previas</p>
+              ) : (
+                <div className="space-y-2">
+                  {searches.map(s => (
+                    <SearchHistoryItem
+                      key={s.id}
+                      search={s}
+                      isActive={activeSearch?.id === s.id}
+                      onSelect={() => s.status === 'completed' && selectSearch(s)}
                     />
                   ))}
                 </div>
               )}
             </div>
-          )}
+          </div>
+        </aside>
 
-          {phase === 'idle' && (
+        {/* ── Right panel: Results ──────────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto bg-muted/20">
+          {/* No search selected */}
+          {!activeSearch && !isPolling && (
             <div className="flex flex-col items-center justify-center h-full py-24 px-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-violet-100 flex items-center justify-center mb-4">
-                <Bot className="w-8 h-8 text-violet-600" />
+                <Search className="w-8 h-8 text-violet-600" />
               </div>
-              <h2 className="font-semibold text-lg text-foreground mb-2">Agente listo</h2>
+              <h2 className="font-semibold text-lg text-foreground mb-2">Buscar anuncios ganadores</h2>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Configura la búsqueda, selecciona tus DNAs y lanza el agente.
-                Buscará anuncios ganadores en Facebook, Instagram y TikTok, los adaptará a tu voz y los enviará por Telegram y email.
+                Busca por keyword o por pagina de Facebook. El agente escanea la Ad Library,
+                filtra anuncios activos 15+ dias, analiza el contenido visual con IA y reescribe el copy.
               </p>
-              <div className="mt-6 grid grid-cols-5 gap-3 text-xs text-muted-foreground">
+              <div className="mt-6 grid grid-cols-4 gap-4 text-xs text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Radio className="w-4 h-4 text-blue-600" />
+                    <Search className="w-4 h-4 text-blue-600" />
                   </div>
-                  <span>FB Ads</span>
+                  <span>Escanear</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
-                    <Camera className="w-4 h-4 text-fuchsia-600" />
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-amber-600" />
                   </div>
-                  <span>Instagram</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
-                    <ExternalLink className="w-4 h-4 text-pink-600" />
-                  </div>
-                  <span>TikTok</span>
+                  <span>Filtrar 15d+</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-violet-600" />
+                    <Play className="w-4 h-4 text-violet-600" />
                   </div>
-                  <span>Modela con IA</span>
+                  <span>Analizar IA</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <Send className="w-4 h-4 text-emerald-600" />
+                    <Copy className="w-4 h-4 text-emerald-600" />
                   </div>
-                  <span>Telegram + Email</span>
+                  <span>Reescribir</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Polling state */}
+          {isPolling && (
+            <div className="flex flex-col items-center justify-center h-full py-24 px-8 text-center">
+              <div className="w-20 h-20 rounded-2xl bg-violet-100 flex items-center justify-center mb-6 animate-pulse">
+                <Bot className="w-10 h-10 text-violet-600" />
+              </div>
+              <h2 className="font-semibold text-lg text-foreground mb-3">El agente esta trabajando...</h2>
+              <div className="space-y-2 text-sm text-muted-foreground max-w-md">
+                <div className="flex items-center gap-2 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                  <span>Buscando y analizando anuncios en Facebook Ad Library</span>
+                </div>
+                <p className="text-xs mt-4 text-muted-foreground/70">
+                  Esto puede tardar 3-8 minutos. El agente busca anuncios, filtra los activos 15+ dias,
+                  analiza el contenido visual con Gemini, resume con Sonnet y reescribe con Opus.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {activeSearch && !isPolling && (
+            <div className="p-6 space-y-5">
+              {/* Search header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                    {activeSearch.status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+                    {activeSearch.status === 'error' && <AlertCircle className="w-5 h-5 text-red-500" />}
+                    {activeSearch.query}
+                  </h2>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>{activeSearch.search_type === 'keyword' ? 'Keyword' : 'Pagina'}</span>
+                    <span>-</span>
+                    <span>{activeSearch.country_code}</span>
+                    {activeSearch.total_results != null && (
+                      <>
+                        <span>-</span>
+                        <span>{activeSearch.total_results} total, {activeSearch.filtered_results} filtrados (15d+)</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Error message */}
+              {activeSearch.status === 'error' && activeSearch.error_message && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{activeSearch.error_message}</span>
+                </div>
+              )}
+
+              {/* Filters */}
+              {ads.length > 0 && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex gap-1.5">
+                    {(['all', 'video', 'image', 'text'] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setAdTypeFilter(t)}
+                        className={cn(
+                          'text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-all',
+                          adTypeFilter === t
+                            ? 'bg-violet-600 text-white border-violet-600'
+                            : 'border-border text-muted-foreground hover:border-violet-300',
+                        )}
+                      >
+                        {t === 'all' ? 'Todos' : t.charAt(0).toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Min dias:</span>
+                    <input
+                      type="number"
+                      value={minDaysFilter}
+                      onChange={e => setMinDaysFilter(Number(e.target.value))}
+                      min={0}
+                      className="w-14 border border-input rounded px-2 py-1 text-xs bg-background"
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {filteredAds.length} anuncios
+                  </span>
+                </div>
+              )}
+
+              {/* Loading */}
+              {isLoadingAds && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+                </div>
+              )}
+
+              {/* Ad Cards */}
+              {!isLoadingAds && filteredAds.length > 0 && (
+                <div className="space-y-4">
+                  {filteredAds.map(ad => (
+                    <AdCard key={ad.id} ad={ad} />
+                  ))}
+                </div>
+              )}
+
+              {/* No results */}
+              {!isLoadingAds && ads.length === 0 && activeSearch.status === 'completed' && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p className="text-sm">No se encontraron anuncios activos 15+ dias para esta busqueda.</p>
+                </div>
+              )}
             </div>
           )}
         </main>
