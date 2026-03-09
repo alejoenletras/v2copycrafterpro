@@ -52,11 +52,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.apify.com/v2/acts/XtaWFhbtfxyzqrFmd/runs",
+        "url": "=https://api.apify.com/v2/acts/XtaWFhbtfxyzqrFmd/run-sync-get-dataset-items",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "token", "value": "=PEGA_TU_APIFY_TOKEN_AQUI" }
+            { "name": "token", "value": "=PEGA_TU_APIFY_TOKEN_AQUI" },
+            { "name": "timeout", "value": "300" }
           ]
         },
         "sendHeaders": true,
@@ -67,98 +68,17 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"count\": {{ $json.max_ads || 50 }},\n  \"scrapeAdDetails\": true,\n  \"urls\": [{ \"url\": \"{{ $json.url }}\" }]\n}",
+        "jsonBody": "={\n  \"count\": {{ $json.max_ads || 50 }},\n  \"urls\": [{ \"url\": \"{{ $json.url }}\" }]\n}",
         "options": {
-          "timeout": 300000
+          "timeout": 360000
         }
       },
-      "id": "start-apify-run",
-      "name": "Start Apify Run",
+      "id": "apify-sync",
+      "name": "Apify Sync Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [860, 300],
-      "notes": "Uses Apify actor XtaWFhbtfxyzqrFmd. Replace PEGA_TU_APIFY_TOKEN_AQUI with your real Apify token."
-    },
-    {
-      "parameters": {
-        "jsCode": "const runData = $input.first().json;\nconst runId = runData.data?.id;\nconst datasetId = runData.data?.defaultDatasetId;\n\nif (!runId) {\n  throw new Error('No run ID returned from Apify: ' + JSON.stringify(runData));\n}\n\nreturn [{\n  json: {\n    run_id: runId,\n    dataset_id: datasetId,\n    status: runData.data?.status || 'RUNNING'\n  }\n}];"
-      },
-      "id": "extract-run-id",
-      "name": "Extract Run ID",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1080, 300]
-    },
-    {
-      "parameters": {
-        "amount": 10,
-        "unit": "seconds"
-      },
-      "id": "wait-10s",
-      "name": "Wait 10s",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [1300, 300]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "=https://api.apify.com/v2/actor-runs/{{ $('Extract Run ID').item.json.run_id }}",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "token", "value": "=PEGA_TU_APIFY_TOKEN_AQUI" }
-          ]
-        },
-        "options": { "timeout": 30000 }
-      },
-      "id": "poll-apify-status",
-      "name": "Poll Apify Status",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1520, 300],
-      "notes": "Replace PEGA_TU_APIFY_TOKEN_AQUI with your real Apify token."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [
-            {
-              "id": "is-succeeded",
-              "leftValue": "={{ $json.data.status }}",
-              "rightValue": "SUCCEEDED",
-              "operator": { "type": "string", "operation": "equals" }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "id": "is-run-complete",
-      "name": "Run Complete?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1740, 300]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "=https://api.apify.com/v2/datasets/{{ $('Extract Run ID').item.json.dataset_id }}/items",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "token", "value": "=PEGA_TU_APIFY_TOKEN_AQUI" },
-            { "name": "limit", "value": "={{ $('Build Apify URL').item.json.max_ads || 50 }}" }
-          ]
-        },
-        "options": { "timeout": 60000 }
-      },
-      "id": "get-dataset-items",
-      "name": "Get Dataset Items",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1960, 200],
-      "notes": "Replace PEGA_TU_APIFY_TOKEN_AQUI with your real Apify token."
+      "notes": "Synchronous Apify call — runs the actor and returns dataset items directly. Replace PEGA_TU_APIFY_TOKEN_AQUI with your real Apify token."
     },
     {
       "parameters": {
@@ -168,7 +88,7 @@
       "name": "Filter 15+ Days",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2180, 200],
+      "position": [1100, 300],
       "executeOnce": true
     },
     {
@@ -190,7 +110,7 @@
       "name": "Has Results?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2400, 200]
+      "position": [1320, 300]
     },
     {
       "parameters": {
@@ -214,7 +134,7 @@
       "name": "Complete (0 results)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2620, 60]
+      "position": [1540, 160]
     },
     {
       "parameters": {
@@ -226,7 +146,7 @@
       "name": "Respond (0)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2840, 60]
+      "position": [1760, 160]
     },
     {
       "parameters": {
@@ -238,7 +158,7 @@
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2620, 340]
+      "position": [1540, 440]
     },
     {
       "parameters": {
@@ -249,7 +169,7 @@
       "name": "Loop Ads",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [2840, 340]
+      "position": [1760, 440]
     },
     {
       "parameters": {
@@ -270,7 +190,7 @@
       "name": "Is Video?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [3060, 340]
+      "position": [1980, 440]
     },
     {
       "parameters": {
@@ -297,7 +217,7 @@
       "name": "Gemini (Video)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3280, 240],
+      "position": [2200, 340],
       "notes": "Replace PEGA_TU_GEMINI_API_KEY_AQUI with your Google AI Studio API key.",
       "onError": "continueRegularOutput"
     },
@@ -320,7 +240,7 @@
       "name": "Is Image?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [3280, 440]
+      "position": [2200, 540]
     },
     {
       "parameters": {
@@ -347,7 +267,7 @@
       "name": "Gemini (Image)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3500, 340],
+      "position": [2420, 540],
       "notes": "Replace PEGA_TU_GEMINI_API_KEY_AQUI with your Google AI Studio API key.",
       "onError": "continueRegularOutput"
     },
@@ -359,7 +279,7 @@
       "name": "Merge Media Desc",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3720, 340]
+      "position": [2640, 440]
     },
     {
       "parameters": {
@@ -382,7 +302,7 @@
       "name": "Claude Sonnet (Summary)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3940, 340],
+      "position": [2860, 440],
       "notes": "Replace PEGA_TU_ANTHROPIC_API_KEY_AQUI with your Anthropic API key.",
       "onError": "continueRegularOutput"
     },
@@ -394,7 +314,7 @@
       "name": "Extract Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4160, 340]
+      "position": [3080, 440]
     },
     {
       "parameters": {
@@ -417,7 +337,7 @@
       "name": "Claude Opus (Rewrite)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4380, 340],
+      "position": [3300, 440],
       "notes": "Replace PEGA_TU_ANTHROPIC_API_KEY_AQUI with your Anthropic API key (same as Sonnet).",
       "onError": "continueRegularOutput"
     },
@@ -429,7 +349,7 @@
       "name": "Prepare Save",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4600, 340]
+      "position": [3520, 440]
     },
     {
       "parameters": {
@@ -453,7 +373,7 @@
       "name": "Save to Supabase",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4820, 340],
+      "position": [3740, 440],
       "notes": "Upsert ad by ad_archive_id (Prefer: resolution=merge-duplicates)"
     },
     {
@@ -464,7 +384,7 @@
       "name": "Prepare Final Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5040, 340],
+      "position": [1980, 300],
       "executeOnce": true
     },
     {
@@ -489,7 +409,7 @@
       "name": "Status → Completed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [5260, 340]
+      "position": [2200, 300]
     }
   ],
   "connections": {
@@ -500,27 +420,9 @@
       "main": [[{ "node": "Build Apify URL", "type": "main", "index": 0 }]]
     },
     "Build Apify URL": {
-      "main": [[{ "node": "Start Apify Run", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Apify Sync Search", "type": "main", "index": 0 }]]
     },
-    "Start Apify Run": {
-      "main": [[{ "node": "Extract Run ID", "type": "main", "index": 0 }]]
-    },
-    "Extract Run ID": {
-      "main": [[{ "node": "Wait 10s", "type": "main", "index": 0 }]]
-    },
-    "Wait 10s": {
-      "main": [[{ "node": "Poll Apify Status", "type": "main", "index": 0 }]]
-    },
-    "Poll Apify Status": {
-      "main": [[{ "node": "Run Complete?", "type": "main", "index": 0 }]]
-    },
-    "Run Complete?": {
-      "main": [
-        [{ "node": "Get Dataset Items", "type": "main", "index": 0 }],
-        [{ "node": "Wait 10s", "type": "main", "index": 0 }]
-      ]
-    },
-    "Get Dataset Items": {
+    "Apify Sync Search": {
       "main": [[{ "node": "Filter 15+ Days", "type": "main", "index": 0 }]]
     },
     "Filter 15+ Days": {
