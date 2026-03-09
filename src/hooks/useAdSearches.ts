@@ -1,16 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_KEY } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import type { AdSearch, Ad, AdSearchType, AdMediaFilter } from '@/types';
 
 const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 
+const headers = {
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  apikey: SUPABASE_KEY,
+};
+
 interface TriggerSearchParams {
   search_type: AdSearchType;
   query: string;
   country_code: string;
   media_type: AdMediaFilter;
+  max_ads: number;
+}
+
+async function restGet<T>(table: string, params: string = ''): Promise<T[]> {
+  const res = await fetch(`${BASE_URL}/rest/v1/${table}?${params}`, { headers });
+  if (!res.ok) return [];
+  return res.json();
 }
 
 export function useAdSearches() {
@@ -25,34 +37,15 @@ export function useAdSearches() {
 
   // Load past searches
   const loadSearches = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('ad_searches')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    if (error) {
-      console.error('Error loading searches:', error);
-      return;
-    }
-    setSearches((data as unknown as AdSearch[]) || []);
+    const data = await restGet<AdSearch>('ad_searches', 'order=created_at.desc&limit=20');
+    setSearches(data);
   }, []);
 
   // Load ads for a specific search
   const loadAds = useCallback(async (searchId: string) => {
     setIsLoadingAds(true);
-    const { data, error } = await supabase
-      .from('ads')
-      .select('*')
-      .eq('search_id', searchId)
-      .order('days_active', { ascending: false });
-
-    if (error) {
-      console.error('Error loading ads:', error);
-      setIsLoadingAds(false);
-      return;
-    }
-    setAds((data as unknown as Ad[]) || []);
+    const data = await restGet<Ad>('ads', `search_id=eq.${searchId}&order=days_active.desc`);
+    setAds(data);
     setIsLoadingAds(false);
   }, []);
 
@@ -78,9 +71,7 @@ export function useAdSearches() {
       setActiveSearchId(search_id);
       toast({ description: 'Busqueda iniciada. El agente esta trabajando...' });
 
-      // Refresh searches list
       await loadSearches();
-
       return search_id;
     } catch (err: any) {
       toast({ variant: 'destructive', description: err.message });
@@ -98,14 +89,9 @@ export function useAdSearches() {
     const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
     const poll = async () => {
-      const { data, error } = await supabase
-        .from('ad_searches')
-        .select('*')
-        .eq('id', activeSearchId)
-        .single();
-
-      if (error) return;
-      const search = data as unknown as AdSearch;
+      const data = await restGet<AdSearch>('ad_searches', `id=eq.${activeSearchId}&limit=1`);
+      const search = data[0];
+      if (!search) return;
       setActiveSearch(search);
 
       if (search.status === 'completed') {
@@ -123,7 +109,7 @@ export function useAdSearches() {
       }
     };
 
-    poll(); // immediate first check
+    poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
   }, [activeSearchId, loadAds, loadSearches, toast]);
@@ -131,7 +117,7 @@ export function useAdSearches() {
   // Select a completed search to view its ads
   const selectSearch = useCallback(async (search: AdSearch) => {
     setActiveSearch(search);
-    setActiveSearchId(null); // stop polling
+    setActiveSearchId(null);
     await loadAds(search.id);
   }, [loadAds]);
 

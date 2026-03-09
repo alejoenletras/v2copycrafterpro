@@ -61,7 +61,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"count\": 100,\n  \"scrapeAdDetails\": true,\n  \"urls\": [{ \"url\": \"{{ $('Build Apify URL').item.json.url }}\" }]\n}",
+        "jsonBody": "={\n  \"count\": {{ $('Webhook').item.json.body.max_ads || 50 }},\n  \"scrapeAdDetails\": true,\n  \"urls\": [{ \"url\": \"{{ $('Build Apify URL').item.json.url }}\" }]\n}",
         "options": {
           "timeout": 300000
         }
@@ -81,7 +81,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Wait for Apify run to complete and get results\nconst runData = $input.first().json;\nconst runId = runData.data?.id;\n\nif (!runId) {\n  throw new Error('No run ID returned from Apify: ' + JSON.stringify(runData));\n}\n\n// Poll for completion\nconst token = '{{ $credentials.apifyToken }}';\nlet status = runData.data.status;\nlet attempts = 0;\nconst maxAttempts = 60; // 5 minutes max\n\nwhile (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'ABORTED' && attempts < maxAttempts) {\n  await new Promise(r => setTimeout(r, 5000));\n  const res = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`);\n  const data = await res.json();\n  status = data.data.status;\n  attempts++;\n}\n\nif (status !== 'SUCCEEDED') {\n  throw new Error(`Apify run ${status} after ${attempts} attempts`);\n}\n\n// Get dataset items\nconst datasetId = runData.data.defaultDatasetId;\nconst itemsRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}&limit=100`);\nconst items = await itemsRes.json();\n\nreturn items.map(item => ({ json: item }));"
+        "jsCode": "// Wait for Apify run to complete and get results\nconst runData = $input.first().json;\nconst runId = runData.data?.id;\n\nif (!runId) {\n  throw new Error('No run ID returned from Apify: ' + JSON.stringify(runData));\n}\n\n// Poll for completion\nconst token = '{{ $credentials.apifyToken }}';\nlet status = runData.data.status;\nlet attempts = 0;\nconst maxAttempts = 60; // 5 minutes max\n\nwhile (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'ABORTED' && attempts < maxAttempts) {\n  await new Promise(r => setTimeout(r, 5000));\n  const res = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`);\n  const data = await res.json();\n  status = data.data.status;\n  attempts++;\n}\n\nif (status !== 'SUCCEEDED') {\n  throw new Error(`Apify run ${status} after ${attempts} attempts`);\n}\n\n// Get dataset items\nconst datasetId = runData.data.defaultDatasetId;\nconst maxAds = $('Webhook').first().json.body?.max_ads || 50;\nconst itemsRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}&limit=${maxAds}`);\nconst items = await itemsRes.json();\n\nreturn items.map(item => ({ json: item }));"
       },
       "id": "wait-apify-results",
       "name": "Wait & Get Results",

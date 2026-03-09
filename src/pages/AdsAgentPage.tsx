@@ -211,6 +211,7 @@ export default function AdsAgentPage() {
   const [query, setQuery] = useState('');
   const [countryCode, setCountryCode] = useState('ALL');
   const [mediaType, setMediaType] = useState<AdMediaFilter>('all');
+  const [maxAds, setMaxAds] = useState(50);
 
   // Ad filters
   const [adTypeFilter, setAdTypeFilter] = useState<'all' | 'video' | 'image' | 'text'>('all');
@@ -226,6 +227,7 @@ export default function AdsAgentPage() {
       query: query.trim(),
       country_code: countryCode,
       media_type: mediaType,
+      max_ads: maxAds,
     });
   };
 
@@ -336,6 +338,21 @@ export default function AdsAgentPage() {
                     {mt.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Max Ads */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                Max anuncios a buscar: <span className="text-foreground font-semibold">{maxAds}</span>
+              </label>
+              <input
+                type="range" min={10} max={100} step={10} value={maxAds}
+                onChange={e => setMaxAds(Number(e.target.value))}
+                className="w-full accent-violet-600"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
+                <span>10</span><span>50</span><span>100</span>
               </div>
             </div>
 

@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { search_type, query, country_code, media_type } = await req.json();
+    const { search_type, query, country_code, media_type, max_ads } = await req.json();
 
     // Validate
     if (!search_type || !["keyword", "page_url"].includes(search_type)) {
@@ -66,6 +66,7 @@ serve(async (req) => {
       query: query.trim(),
       country_code: country_code || "ALL",
       media_type: media_type || "all",
+      max_ads: max_ads || 50,
       supabase_url: supabaseUrl,
       supabase_service_key: serviceKey,
     };
