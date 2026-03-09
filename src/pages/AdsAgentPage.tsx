@@ -215,7 +215,7 @@ export default function AdsAgentPage() {
 
   // Ad filters
   const [adTypeFilter, setAdTypeFilter] = useState<'all' | 'video' | 'image' | 'text'>('all');
-  const [minDaysFilter, setMinDaysFilter] = useState<number>(15);
+  const [minDaysFilter, setMinDaysFilter] = useState<number>(0);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -423,7 +423,7 @@ export default function AdsAgentPage() {
               <h2 className="font-semibold text-lg text-foreground mb-2">Buscar anuncios ganadores</h2>
               <p className="text-sm text-muted-foreground max-w-sm">
                 Busca por keyword o por pagina de Facebook. El agente escanea la Ad Library,
-                filtra anuncios activos 15+ dias, analiza el contenido visual con IA y reescribe el copy.
+                filtra anuncios activos 3+ dias, analiza el contenido visual con IA y reescribe el copy.
               </p>
               <div className="mt-6 grid grid-cols-4 gap-4 text-xs text-muted-foreground">
                 <div className="flex flex-col items-center gap-2">
@@ -436,7 +436,7 @@ export default function AdsAgentPage() {
                   <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
                     <Clock className="w-4 h-4 text-amber-600" />
                   </div>
-                  <span>Filtrar 15d+</span>
+                  <span>Filtrar 3d+</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
@@ -467,7 +467,7 @@ export default function AdsAgentPage() {
                   <span>Buscando y analizando anuncios en Facebook Ad Library</span>
                 </div>
                 <p className="text-xs mt-4 text-muted-foreground/70">
-                  Esto puede tardar 3-8 minutos. El agente busca anuncios, filtra los activos 15+ dias,
+                  Esto puede tardar 3-8 minutos. El agente busca anuncios, filtra los activos 3+ dias,
                   analiza el contenido visual con Gemini, resume con Sonnet y reescribe con Opus.
                 </p>
               </div>
@@ -492,7 +492,7 @@ export default function AdsAgentPage() {
                     {activeSearch.total_results != null && (
                       <>
                         <span>-</span>
-                        <span>{activeSearch.total_results} total, {activeSearch.filtered_results} filtrados (15d+)</span>
+                        <span>{activeSearch.total_results} total, {activeSearch.filtered_results} filtrados (3d+)</span>
                       </>
                     )}
                   </div>
@@ -560,8 +560,16 @@ export default function AdsAgentPage() {
 
               {/* No results */}
               {!isLoadingAds && ads.length === 0 && activeSearch.status === 'completed' && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <p className="text-sm">No se encontraron anuncios activos 15+ dias para esta busqueda.</p>
+                <div className="text-center py-12 text-muted-foreground space-y-2">
+                  <p className="text-sm">No se encontraron anuncios para esta busqueda.</p>
+                  {activeSearch.total_results != null && (
+                    <p className="text-xs">
+                      Apify devolvio {activeSearch.total_results} items, {activeSearch.filtered_results || 0} pasaron el filtro de 3+ dias activos.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground/60">
+                    Intenta con otro keyword o pais. Si siempre devuelve 0 items, verifica tu token de Apify en N8N.
+                  </p>
                 </div>
               )}
             </div>

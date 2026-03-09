@@ -78,14 +78,15 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [860, 300],
-      "notes": "Synchronous Apify call — runs the actor and returns dataset items directly. Replace PEGA_TU_APIFY_TOKEN_AQUI with your real Apify token."
+      "notes": "Synchronous Apify call — runs the actor and returns dataset items directly. Replace PEGA_TU_APIFY_TOKEN_AQUI with your real Apify token.",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Filter ads active 15+ days and extract key fields\nconst items = $input.all();\nconst now = new Date();\nconst filtered = [];\nlet totalCount = items.length;\n\nfor (const item of items) {\n  const ad = item.json;\n  \n  const startDateStr = ad.startDate || ad.start_date || ad.startDateFormatted || ad.start_date_formatted;\n  if (!startDateStr) continue;\n  \n  const startDate = new Date(startDateStr);\n  if (isNaN(startDate.getTime())) continue;\n  \n  const daysActive = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));\n  if (daysActive < 15) continue;\n  \n  const snapshot = ad.snapshot || {};\n  const hasVideo = snapshot.videos && snapshot.videos.length > 0 && snapshot.videos[0].video_sd_url;\n  const hasImage = snapshot.images && snapshot.images.length > 0 && snapshot.images[0].original_image_url;\n  const adType = hasVideo ? 'video' : hasImage ? 'image' : 'text';\n  \n  let mediaUrl = null;\n  if (hasVideo) mediaUrl = snapshot.videos[0].video_sd_url;\n  else if (hasImage) mediaUrl = snapshot.images[0].original_image_url;\n  \n  filtered.push({\n    json: {\n      ad_archive_id: String(ad.adArchiveID || ad.ad_archive_id || ad.id || ''),\n      page_id: String(ad.pageID || ad.page_id || ''),\n      page_name: ad.pageName || ad.page_name || 'Unknown',\n      page_url: ad.pageAlias ? `https://facebook.com/${ad.pageAlias}` : null,\n      page_likes: ad.pageLikes || ad.page_likes || null,\n      ad_start_date: startDate.toISOString().split('T')[0],\n      days_active: daysActive,\n      ad_type: adType,\n      original_ad_copy: snapshot.body?.text || ad.ad_creative_bodies?.[0] || ad.body || null,\n      media_url: mediaUrl,\n      raw_data: ad,\n      _search_id: $('Build Apify URL').first().json.search_id,\n      _supabase_url: $('Build Apify URL').first().json.supabase_url,\n      _supabase_service_key: $('Build Apify URL').first().json.supabase_service_key,\n      _total_count: totalCount\n    }\n  });\n}\n\nif (filtered.length === 0) {\n  return [{\n    json: {\n      _no_results: true,\n      _search_id: $('Build Apify URL').first().json.search_id,\n      _supabase_url: $('Build Apify URL').first().json.supabase_url,\n      _supabase_service_key: $('Build Apify URL').first().json.supabase_service_key,\n      _total_count: totalCount,\n      _filtered_count: 0\n    }\n  }];\n}\n\nfiltered[0].json._filtered_count = filtered.length;\n\nreturn filtered;"
+        "jsCode": "// Filter ads and extract key fields — MIN 3 days active\nconst items = $input.all();\nconst ctx = $('Build Apify URL').first().json;\nconst now = new Date();\nconst MIN_DAYS = 3;\n\n// Check if Apify returned an error\nconst first = items[0]?.json || {};\nif (first.error || first.statusCode >= 400 || first.message) {\n  return [{\n    json: {\n      _no_results: true,\n      _error: true,\n      _error_message: first.error || first.message || 'Apify returned error status ' + (first.statusCode || 'unknown'),\n      _search_id: ctx.search_id,\n      _supabase_url: ctx.supabase_url,\n      _supabase_service_key: ctx.supabase_service_key,\n      _total_count: 0,\n      _filtered_count: 0\n    }\n  }];\n}\n\nconst filtered = [];\nlet totalCount = items.length;\nlet skippedNoDate = 0;\nlet skippedTooNew = 0;\n\nfor (const item of items) {\n  const ad = item.json;\n  \n  const startDateStr = ad.startDate || ad.start_date || ad.startDateFormatted || ad.start_date_formatted;\n  if (!startDateStr) { skippedNoDate++; continue; }\n  \n  const startDate = new Date(startDateStr);\n  if (isNaN(startDate.getTime())) { skippedNoDate++; continue; }\n  \n  const daysActive = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));\n  if (daysActive < MIN_DAYS) { skippedTooNew++; continue; }\n  \n  const snapshot = ad.snapshot || {};\n  const hasVideo = snapshot.videos && snapshot.videos.length > 0 && snapshot.videos[0].video_sd_url;\n  const hasImage = snapshot.images && snapshot.images.length > 0 && snapshot.images[0].original_image_url;\n  const adType = hasVideo ? 'video' : hasImage ? 'image' : 'text';\n  \n  let mediaUrl = null;\n  if (hasVideo) mediaUrl = snapshot.videos[0].video_sd_url;\n  else if (hasImage) mediaUrl = snapshot.images[0].original_image_url;\n  \n  filtered.push({\n    json: {\n      ad_archive_id: String(ad.adArchiveID || ad.ad_archive_id || ad.id || ''),\n      page_id: String(ad.pageID || ad.page_id || ''),\n      page_name: ad.pageName || ad.page_name || 'Unknown',\n      page_url: ad.pageAlias ? `https://facebook.com/${ad.pageAlias}` : null,\n      page_likes: ad.pageLikes || ad.page_likes || null,\n      ad_start_date: startDate.toISOString().split('T')[0],\n      days_active: daysActive,\n      ad_type: adType,\n      original_ad_copy: snapshot.body?.text || ad.ad_creative_bodies?.[0] || ad.body || null,\n      media_url: mediaUrl,\n      raw_data: ad,\n      _search_id: ctx.search_id,\n      _supabase_url: ctx.supabase_url,\n      _supabase_service_key: ctx.supabase_service_key,\n      _total_count: totalCount\n    }\n  });\n}\n\nconsole.log(`Apify returned ${totalCount} items. Skipped: ${skippedNoDate} no date, ${skippedTooNew} too new (<${MIN_DAYS}d). Passed: ${filtered.length}`);\n\nif (filtered.length === 0) {\n  return [{\n    json: {\n      _no_results: true,\n      _search_id: ctx.search_id,\n      _supabase_url: ctx.supabase_url,\n      _supabase_service_key: ctx.supabase_service_key,\n      _total_count: totalCount,\n      _filtered_count: 0\n    }\n  }];\n}\n\n// Sort by days_active desc so best ads come first\nfiltered.sort((a, b) => b.json.days_active - a.json.days_active);\nfiltered[0].json._filtered_count = filtered.length;\n\nreturn filtered;"
       },
       "id": "filter-15-days",
-      "name": "Filter 15+ Days",
+      "name": "Filter & Extract",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1100, 300],
@@ -127,7 +128,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"status\": \"completed\",\n  \"total_results\": {{ $json._total_count }},\n  \"filtered_results\": 0,\n  \"completed_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "jsonBody": "={\n  \"status\": \"{{ $json._error ? 'error' : 'completed' }}\",\n  \"total_results\": {{ $json._total_count || 0 }},\n  \"filtered_results\": 0,\n  {{ $json._error_message ? '\"error_message\": ' + JSON.stringify($json._error_message) + ',' : '' }}\n  \"completed_at\": \"{{ new Date().toISOString() }}\"\n}",
         "options": {}
       },
       "id": "no-results-complete",
@@ -423,9 +424,9 @@
       "main": [[{ "node": "Apify Sync Search", "type": "main", "index": 0 }]]
     },
     "Apify Sync Search": {
-      "main": [[{ "node": "Filter 15+ Days", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Filter & Extract", "type": "main", "index": 0 }]]
     },
-    "Filter 15+ Days": {
+    "Filter & Extract": {
       "main": [[{ "node": "Has Results?", "type": "main", "index": 0 }]]
     },
     "Has Results?": {
