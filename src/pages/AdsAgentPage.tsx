@@ -346,13 +346,21 @@ export default function AdsAgentPage() {
               <label className="text-xs font-medium text-muted-foreground block mb-1.5">
                 Max anuncios a buscar: <span className="text-foreground font-semibold">{maxAds}</span>
               </label>
-              <input
-                type="range" min={10} max={100} step={10} value={maxAds}
-                onChange={e => setMaxAds(Number(e.target.value))}
-                className="w-full accent-violet-600"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
-                <span>10</span><span>50</span><span>100</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[5, 15, 20, 30, 50, 60, 80, 100].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setMaxAds(n)}
+                    className={cn(
+                      'text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-all',
+                      maxAds === n
+                        ? 'bg-violet-600 text-white border-violet-600'
+                        : 'border-border text-muted-foreground hover:border-violet-300',
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
               </div>
             </div>
 
