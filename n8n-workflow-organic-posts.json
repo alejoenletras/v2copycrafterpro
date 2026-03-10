@@ -1,0 +1,171 @@
+{
+  "name": "HOOQ Organic Posts Scraping",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 24 }]
+        }
+      },
+      "id": "schedule-daily",
+      "name": "Every 24 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Config — replace with your values\nconst SUPABASE_URL = 'https://ainspdnploxzrujbgcqo.supabase.co';\nconst SUPABASE_KEY = 'PEGA_TU_SUPABASE_SERVICE_KEY_AQUI';\nconst APIFY_TOKEN = 'PEGA_TU_APIFY_TOKEN_AQUI';\nconst ANTHROPIC_KEY = 'PEGA_TU_ANTHROPIC_API_KEY_AQUI';\n\n// Fetch competitors with IG or TikTok found\nconst res = await fetch(\n  `${SUPABASE_URL}/rest/v1/competitor_profiles?or=(ig_status.eq.found,tiktok_status.eq.found)&order=last_scraped_at.asc.nullsfirst&limit=15`,\n  {\n    headers: {\n      'Authorization': `Bearer ${SUPABASE_KEY}`,\n      'apikey': SUPABASE_KEY,\n      'Content-Type': 'application/json'\n    }\n  }\n);\n\nif (!res.ok) {\n  console.log('Failed to fetch competitors:', await res.text());\n  return [];\n}\n\nconst competitors = await res.json();\nconsole.log(`Found ${competitors.length} competitors with IG/TikTok profiles`);\n\nif (competitors.length === 0) return [];\n\n// Build scrape tasks — one per platform per competitor\nconst tasks = [];\nfor (const c of competitors) {\n  if (c.ig_status === 'found' && c.ig_handle) {\n    tasks.push({\n      json: {\n        competitor_id: c.id,\n        competitor_name: c.fb_page_name,\n        platform: 'instagram',\n        handle: c.ig_handle,\n        profile_url: c.ig_profile_url,\n        _supabase_url: SUPABASE_URL,\n        _supabase_key: SUPABASE_KEY,\n        _apify_token: APIFY_TOKEN,\n        _anthropic_key: ANTHROPIC_KEY\n      }\n    });\n  }\n  if (c.tiktok_status === 'found' && c.tiktok_handle) {\n    tasks.push({\n      json: {\n        competitor_id: c.id,\n        competitor_name: c.fb_page_name,\n        platform: 'tiktok',\n        handle: c.tiktok_handle,\n        profile_url: c.tiktok_profile_url,\n        _supabase_url: SUPABASE_URL,\n        _supabase_key: SUPABASE_KEY,\n        _apify_token: APIFY_TOKEN,\n        _anthropic_key: ANTHROPIC_KEY\n      }\n    });\n  }\n}\n\nconsole.log(`Created ${tasks.length} scrape tasks`);\nreturn tasks;"
+      },
+      "id": "fetch-competitors",
+      "name": "Fetch Competitors with Profiles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-tasks",
+      "name": "Loop Tasks",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create scrape_run record\nconst task = $input.first().json;\n\nconst runRes = await fetch(\n  `${task._supabase_url}/rest/v1/scrape_runs`,\n  {\n    method: 'POST',\n    headers: {\n      'Authorization': `Bearer ${task._supabase_key}`,\n      'apikey': task._supabase_key,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=representation'\n    },\n    body: JSON.stringify({\n      source: task.platform,\n      keyword: task.handle,\n      competitor_id: task.competitor_id,\n      status: 'running',\n      max_results: 30\n    })\n  }\n);\n\nlet runId = null;\nif (runRes.ok) {\n  const runs = await runRes.json();\n  runId = runs[0]?.id || null;\n}\n\nreturn [{ json: { ...task, _run_id: runId } }];"
+      },
+      "id": "create-run",
+      "name": "Create Scrape Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-instagram",
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "instagram",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "switch-platform",
+      "name": "Is Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Scrape Instagram posts via Apify Instagram Scraper\nconst task = $input.first().json;\nconsole.log(`Scraping IG posts for @${task.handle}`);\n\nconst MIN_VIEWS = 50000;\nconst MIN_LIKES_IMAGE = 5000;\n\ntry {\n  const apifyRes = await fetch(\n    `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${task._apify_token}&timeout=180`,\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        directUrls: [`https://instagram.com/${task.handle}`],\n        resultsType: 'posts',\n        resultsLimit: 30,\n        addParentData: true\n      })\n    }\n  );\n\n  if (!apifyRes.ok) {\n    const errText = await apifyRes.text();\n    console.log('Apify IG failed:', apifyRes.status, errText);\n    return [{ json: { ...task, _posts: [], _error: 'Apify request failed', _total_scraped: 0 } }];\n  }\n\n  const rawPosts = await apifyRes.json();\n  console.log(`IG raw posts: ${rawPosts.length}`);\n\n  // Filter and transform\n  const posts = [];\n  for (const p of rawPosts) {\n    const isVideo = p.type === 'Video' || p.videoUrl;\n    const views = p.videoViewCount || p.videoPlayCount || 0;\n    const likes = p.likesCount || 0;\n    \n    // Filter: videos need >= MIN_VIEWS, images/carousels need >= MIN_LIKES_IMAGE\n    if (isVideo && views < MIN_VIEWS) continue;\n    if (!isVideo && likes < MIN_LIKES_IMAGE) continue;\n\n    posts.push({\n      competitor_id: task.competitor_id,\n      platform: 'instagram',\n      post_type: isVideo ? 'video' : (p.type === 'Sidecar' ? 'carousel' : 'image'),\n      post_url: p.url || p.inputUrl || null,\n      post_id: p.id || p.shortCode || null,\n      posted_at: p.timestamp || null,\n      views: views,\n      likes: likes,\n      comments: p.commentsCount || 0,\n      shares: 0,\n      caption: (p.caption || '').substring(0, 5000),\n      media_url: p.videoUrl || p.displayUrl || null,\n      thumbnail_url: p.displayUrl || null\n    });\n  }\n\n  console.log(`IG filtered posts: ${posts.length} (from ${rawPosts.length})`);\n  return [{ json: { ...task, _posts: posts, _total_scraped: rawPosts.length } }];\n\n} catch(e) {\n  console.log('IG scraping error:', e.message);\n  return [{ json: { ...task, _posts: [], _error: e.message, _total_scraped: 0 } }];\n}"
+      },
+      "id": "scrape-ig",
+      "name": "Scrape Instagram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 200],
+      "notes": "Scrapes last 30 posts, filters: videos >= 50K views, images >= 5K likes"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Scrape TikTok posts via Apify TikTok Scraper\nconst task = $input.first().json;\nconsole.log(`Scraping TikTok posts for @${task.handle}`);\n\nconst MIN_VIEWS = 50000;\n\ntry {\n  const apifyRes = await fetch(\n    `https://api.apify.com/v2/acts/clockworks~tiktok-scraper/run-sync-get-dataset-items?token=${task._apify_token}&timeout=180`,\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        profiles: [task.handle],\n        resultsPerPage: 30,\n        shouldDownloadVideos: false\n      })\n    }\n  );\n\n  if (!apifyRes.ok) {\n    const errText = await apifyRes.text();\n    console.log('Apify TikTok failed:', apifyRes.status, errText);\n    return [{ json: { ...task, _posts: [], _error: 'Apify request failed', _total_scraped: 0 } }];\n  }\n\n  const rawPosts = await apifyRes.json();\n  console.log(`TikTok raw posts: ${rawPosts.length}`);\n\n  // Filter and transform\n  const posts = [];\n  for (const p of rawPosts) {\n    const views = p.playCount || p.stats?.playCount || 0;\n    const likes = p.diggCount || p.stats?.diggCount || 0;\n    \n    if (views < MIN_VIEWS) continue;\n\n    posts.push({\n      competitor_id: task.competitor_id,\n      platform: 'tiktok',\n      post_type: 'video',\n      post_url: p.webVideoUrl || `https://tiktok.com/@${task.handle}/video/${p.id}`,\n      post_id: p.id || null,\n      posted_at: p.createTimeISO || (p.createTime ? new Date(p.createTime * 1000).toISOString() : null),\n      views: views,\n      likes: likes,\n      comments: p.commentCount || p.stats?.commentCount || 0,\n      shares: p.shareCount || p.stats?.shareCount || 0,\n      caption: (p.text || p.desc || '').substring(0, 5000),\n      media_url: p.videoUrl || null,\n      thumbnail_url: p.covers?.default || p.video?.cover || null\n    });\n  }\n\n  console.log(`TikTok filtered posts: ${posts.length} (from ${rawPosts.length})`);\n  return [{ json: { ...task, _posts: posts, _total_scraped: rawPosts.length } }];\n\n} catch(e) {\n  console.log('TikTok scraping error:', e.message);\n  return [{ json: { ...task, _posts: [], _error: e.message, _total_scraped: 0 } }];\n}"
+      },
+      "id": "scrape-tiktok",
+      "name": "Scrape TikTok",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 400],
+      "notes": "Scrapes last 30 posts, filters videos >= 50K views"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save filtered posts to Supabase via upsert (dedup by platform+post_id)\nconst task = $input.first().json;\nconst posts = task._posts || [];\n\nconsole.log(`Saving ${posts.length} posts for ${task.competitor_name} (${task.platform})`);\n\nlet savedCount = 0;\nlet errorCount = 0;\n\nfor (const post of posts) {\n  try {\n    const saveRes = await fetch(\n      `${task._supabase_url}/rest/v1/organic_posts?on_conflict=platform,post_id`,\n      {\n        method: 'POST',\n        headers: {\n          'Authorization': `Bearer ${task._supabase_key}`,\n          'apikey': task._supabase_key,\n          'Content-Type': 'application/json',\n          'Prefer': 'resolution=merge-duplicates,return=minimal'\n        },\n        body: JSON.stringify(post)\n      }\n    );\n\n    if (!saveRes.ok) {\n      const err = await saveRes.text();\n      console.log(`Save failed for post ${post.post_id}: ${err}`);\n      errorCount++;\n    } else {\n      savedCount++;\n    }\n  } catch(e) {\n    console.log(`Save error: ${e.message}`);\n    errorCount++;\n  }\n}\n\nconsole.log(`Saved: ${savedCount}, Errors: ${errorCount}`);\n\n// Update last_scraped_at on competitor\nawait fetch(\n  `${task._supabase_url}/rest/v1/competitor_profiles?id=eq.${task.competitor_id}`,\n  {\n    method: 'PATCH',\n    headers: {\n      'Authorization': `Bearer ${task._supabase_key}`,\n      'apikey': task._supabase_key,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=minimal'\n    },\n    body: JSON.stringify({ last_scraped_at: new Date().toISOString() })\n  }\n);\n\nreturn [{\n  json: {\n    ...task,\n    _saved: savedCount,\n    _errors: errorCount,\n    _post_ids: posts.filter(p => p.post_id).map(p => p.post_id)\n  }\n}];"
+      },
+      "id": "save-posts",
+      "name": "Save Posts to Supabase",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze saved posts with Claude — DNA extraction (Sonnet) + rewrite (Opus)\nconst task = $input.first().json;\nconst postIds = task._post_ids || [];\n\nif (postIds.length === 0) {\n  console.log('No posts to analyze');\n  return [{ json: { ...task, _analyzed: 0 } }];\n}\n\n// Fetch posts that haven't been analyzed yet\nconst postsRes = await fetch(\n  `${task._supabase_url}/rest/v1/organic_posts?competitor_id=eq.${task.competitor_id}&platform=eq.${task.platform}&analyzed_at=is.null&limit=10`,\n  {\n    headers: {\n      'Authorization': `Bearer ${task._supabase_key}`,\n      'apikey': task._supabase_key,\n      'Content-Type': 'application/json'\n    }\n  }\n);\n\nif (!postsRes.ok) {\n  console.log('Failed to fetch unanalyzed posts');\n  return [{ json: { ...task, _analyzed: 0 } }];\n}\n\nconst posts = await postsRes.json();\nconsole.log(`Analyzing ${posts.length} posts for ${task.competitor_name}`);\n\nlet analyzed = 0;\n\nfor (const post of posts) {\n  try {\n    // Step 1: Content analysis with Sonnet\n    const captionPreview = (post.caption || 'No caption').replace(/[\\\"\\n\\r]/g, ' ').substring(0, 2000);\n    \n    const analysisRes = await fetch('https://api.anthropic.com/v1/messages', {\n      method: 'POST',\n      headers: {\n        'x-api-key': task._anthropic_key,\n        'anthropic-version': '2023-06-01',\n        'Content-Type': 'application/json'\n      },\n      body: JSON.stringify({\n        model: 'claude-sonnet-4-5-20250929',\n        max_tokens: 800,\n        system: 'You are an expert content analyst. Analyze organic social media posts for strategic intelligence. Respond in Spanish.',\n        messages: [{\n          role: 'user',\n          content: `Analyze this ${post.platform} post:\\n\\nCaption: ${captionPreview}\\nType: ${post.post_type}\\nViews: ${post.views}\\nLikes: ${post.likes}\\nComments: ${post.comments}\\n\\nProvide a 2-3 sentence strategic analysis: what content type, hook technique, audience targeting, and why it likely went viral.`\n        }]\n      })\n    });\n\n    let analysis = null;\n    if (analysisRes.ok) {\n      const r = await analysisRes.json();\n      analysis = r.content?.[0]?.text || null;\n    }\n\n    // Step 2: Rewrite with Opus (only if has caption)\n    let rewritten = null;\n    if (post.caption && post.caption.length > 20) {\n      const rewriteRes = await fetch('https://api.anthropic.com/v1/messages', {\n        method: 'POST',\n        headers: {\n          'x-api-key': task._anthropic_key,\n          'anthropic-version': '2023-06-01',\n          'Content-Type': 'application/json'\n        },\n        body: JSON.stringify({\n          model: 'claude-opus-4-6',\n          max_tokens: 1500,\n          system: 'You are a world-class direct-response copywriter. Rewrite social media captions maintaining the same persuasion structure but with fresh wording. Write in the same language as the original.',\n          messages: [{\n            role: 'user',\n            content: `Rewrite this ${post.platform} caption maintaining the same hook, structure, and CTA style. Make it sound human, not AI:\\n\\n${captionPreview}\\n\\nJust output the rewritten caption, nothing else.`\n          }]\n        })\n      });\n\n      if (rewriteRes.ok) {\n        const r = await rewriteRes.json();\n        rewritten = r.content?.[0]?.text || null;\n      }\n    }\n\n    // Save analysis back to post\n    const updateRes = await fetch(\n      `${task._supabase_url}/rest/v1/organic_posts?id=eq.${post.id}`,\n      {\n        method: 'PATCH',\n        headers: {\n          'Authorization': `Bearer ${task._supabase_key}`,\n          'apikey': task._supabase_key,\n          'Content-Type': 'application/json',\n          'Prefer': 'return=minimal'\n        },\n        body: JSON.stringify({\n          content_analysis: analysis,\n          rewritten_copy: rewritten,\n          analyzed_at: new Date().toISOString()\n        })\n      }\n    );\n\n    if (updateRes.ok) analyzed++;\n    else console.log('Update failed:', await updateRes.text());\n\n  } catch(e) {\n    console.log(`Analysis error for post ${post.id}:`, e.message);\n  }\n}\n\nconsole.log(`Analyzed ${analyzed} of ${posts.length} posts`);\nreturn [{ json: { ...task, _analyzed: analyzed } }];"
+      },
+      "id": "analyze-posts",
+      "name": "Analyze with Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1740, 300],
+      "notes": "Sonnet for content analysis, Opus for caption rewrite. Processes up to 10 unanalyzed posts per competitor."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update scrape_run with final stats\nconst task = $input.first().json;\nconst now = new Date().toISOString();\n\nif (task._run_id) {\n  const status = task._error ? 'failed' : (task._errors > 0 ? 'partial' : 'completed');\n  \n  await fetch(\n    `${task._supabase_url}/rest/v1/scrape_runs?id=eq.${task._run_id}`,\n    {\n      method: 'PATCH',\n      headers: {\n        'Authorization': `Bearer ${task._supabase_key}`,\n        'apikey': task._supabase_key,\n        'Content-Type': 'application/json',\n        'Prefer': 'return=minimal'\n      },\n      body: JSON.stringify({\n        status: status,\n        completed_at: now,\n        total_scraped: task._total_scraped || 0,\n        total_filtered: task._saved || 0,\n        total_analyzed: task._analyzed || 0,\n        total_errors: task._errors || 0,\n        error_message: task._error || null\n      })\n    }\n  );\n}\n\nconsole.log(`Done: ${task.competitor_name} (${task.platform}) — scraped: ${task._total_scraped}, saved: ${task._saved}, analyzed: ${task._analyzed}`);\nreturn [{ json: { done: true, competitor: task.competitor_name, platform: task.platform } }];"
+      },
+      "id": "complete-run",
+      "name": "Complete Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 300]
+    }
+  ],
+  "connections": {
+    "Every 24 Hours": {
+      "main": [[{ "node": "Fetch Competitors with Profiles", "type": "main", "index": 0 }]]
+    },
+    "Fetch Competitors with Profiles": {
+      "main": [[{ "node": "Loop Tasks", "type": "main", "index": 0 }]]
+    },
+    "Loop Tasks": {
+      "main": [
+        [],
+        [{ "node": "Create Scrape Run", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Scrape Run": {
+      "main": [[{ "node": "Is Instagram?", "type": "main", "index": 0 }]]
+    },
+    "Is Instagram?": {
+      "main": [
+        [{ "node": "Scrape Instagram", "type": "main", "index": 0 }],
+        [{ "node": "Scrape TikTok", "type": "main", "index": 0 }]
+      ]
+    },
+    "Scrape Instagram": {
+      "main": [[{ "node": "Save Posts to Supabase", "type": "main", "index": 0 }]]
+    },
+    "Scrape TikTok": {
+      "main": [[{ "node": "Save Posts to Supabase", "type": "main", "index": 0 }]]
+    },
+    "Save Posts to Supabase": {
+      "main": [[{ "node": "Analyze with Claude", "type": "main", "index": 0 }]]
+    },
+    "Analyze with Claude": {
+      "main": [[{ "node": "Complete Run", "type": "main", "index": 0 }]]
+    },
+    "Complete Run": {
+      "main": [[{ "node": "Loop Tasks", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [{ "name": "HOOQ" }],
+  "triggerCount": 1
+}

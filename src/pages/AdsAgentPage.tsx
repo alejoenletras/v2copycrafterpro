@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Home, Loader2, ChevronDown, Search, Clock, CheckCircle2,
-  AlertCircle, Copy, Video, Image, FileText, Globe, Bot,
-  Play, XCircle, ChevronRight,
+  AlertCircle, Globe, Bot, ExternalLink,
+  XCircle,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAdSearches } from '@/hooks/useAdSearches';
@@ -36,115 +36,64 @@ const MEDIA_TYPES: { value: AdMediaFilter; label: string }[] = [
   { value: 'image', label: 'Imagen' },
 ];
 
-// ─── Ad Card ─────────────────────────────────────────────────────────────────
+// ─── Ads Table ───────────────────────────────────────────────────────────────
 
-function AdCard({ ad }: { ad: Ad }) {
-  const { toast } = useToast();
-  const [showOriginal, setShowOriginal] = useState(false);
-
-  const handleCopy = () => {
-    if (ad.rewritten_copy) {
-      navigator.clipboard.writeText(ad.rewritten_copy);
-      toast({ description: 'Copy copiado al portapapeles' });
-    }
-  };
-
-  const typeIcon = ad.ad_type === 'video' ? Video : ad.ad_type === 'image' ? Image : FileText;
-  const TypeIcon = typeIcon;
-
+function AdsTable({ ads }: { ads: Ad[] }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-sm text-foreground truncate">{ad.page_name}</span>
-            {ad.page_url && (
-              <a href={ad.page_url} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-violet-600 transition-colors shrink-0">
-                Ver pagina
-              </a>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className="gap-1 text-xs">
-              <TypeIcon className="w-3 h-3" />
-              {ad.ad_type}
-            </Badge>
-            <Badge
-              variant="secondary"
-              className={cn(
-                'text-xs',
-                ad.days_active >= 30 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-              )}
-            >
-              {ad.days_active} dias activo
-            </Badge>
-            {ad.page_likes && (
-              <span className="text-xs text-muted-foreground">{ad.page_likes.toLocaleString()} likes</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Media preview */}
-      {ad.media_url && ad.ad_type === 'video' && (
-        <div className="relative rounded-lg overflow-hidden bg-muted aspect-video flex items-center justify-center">
-          <video src={ad.media_url} controls className="w-full h-full object-cover" preload="metadata" />
-        </div>
-      )}
-      {ad.media_url && ad.ad_type === 'image' && (
-        <div className="rounded-lg overflow-hidden bg-muted">
-          <img src={ad.media_url} alt="Ad media" className="w-full object-cover max-h-64" loading="lazy" />
-        </div>
-      )}
-
-      {/* Media description (AI) */}
-      {ad.media_description && (
-        <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-          <span className="font-medium text-foreground">Analisis visual: </span>
-          {ad.media_description}
-        </div>
-      )}
-
-      {/* Summary */}
-      {ad.summary && (
-        <div className="text-sm text-foreground bg-violet-50 border border-violet-100 rounded-lg p-3">
-          <span className="font-medium text-violet-700 text-xs block mb-1">Resumen estrategico</span>
-          {ad.summary}
-        </div>
-      )}
-
-      {/* Rewritten copy */}
-      {ad.rewritten_copy && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium text-emerald-700 text-xs">Copy reescrito</span>
-            <Button onClick={handleCopy} variant="ghost" size="sm" className="gap-1 h-7 text-xs text-emerald-700 hover:text-emerald-800">
-              <Copy className="w-3 h-3" /> Copiar
-            </Button>
-          </div>
-          <p className="text-sm text-emerald-900 whitespace-pre-wrap">{ad.rewritten_copy}</p>
-        </div>
-      )}
-
-      {/* Original copy (collapsible) */}
-      {ad.original_ad_copy && (
-        <div>
-          <button
-            onClick={() => setShowOriginal(!showOriginal)}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-          >
-            <ChevronRight className={cn('w-3 h-3 transition-transform', showOriginal && 'rotate-90')} />
-            Copy original
-          </button>
-          {showOriginal && (
-            <p className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 whitespace-pre-wrap">
-              {ad.original_ad_copy}
-            </p>
-          )}
-        </div>
-      )}
+    <div className="border border-border rounded-xl overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-muted/50 border-b border-border">
+            <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Pagina</th>
+            <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Tipo</th>
+            <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Dias activo</th>
+            <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Collation</th>
+            <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ads.map(ad => {
+            const collation = (ad.raw_data as Record<string, unknown>)?.collationCount;
+            const adLibUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.ad_archive_id}`;
+            return (
+              <tr key={ad.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                <td className="px-4 py-3">
+                  <span className="font-medium text-foreground text-sm">{ad.page_name}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <Badge variant="outline" className="text-xs">
+                    {ad.ad_type}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={cn(
+                    'font-semibold text-sm',
+                    ad.days_active >= 30 ? 'text-emerald-600' : ad.days_active >= 7 ? 'text-amber-600' : 'text-muted-foreground'
+                  )}>
+                    {ad.days_active}d
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="text-sm text-muted-foreground">
+                    {collation != null ? String(collation) : '-'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <a
+                    href={adLibUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Ver
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -440,15 +389,15 @@ export default function AdsAgentPage() {
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
-                    <Play className="w-4 h-4 text-violet-600" />
+                    <CheckCircle2 className="w-4 h-4 text-violet-600" />
                   </div>
-                  <span>Analizar IA</span>
+                  <span>Analizar</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <Copy className="w-4 h-4 text-emerald-600" />
+                    <ExternalLink className="w-4 h-4 text-emerald-600" />
                   </div>
-                  <span>Reescribir</span>
+                  <span>Resultados</span>
                 </div>
               </div>
             </div>
@@ -549,17 +498,33 @@ export default function AdsAgentPage() {
                 </div>
               )}
 
-              {/* Ad Cards */}
+              {/* Ads Table */}
               {!isLoadingAds && filteredAds.length > 0 && (
-                <div className="space-y-4">
-                  {filteredAds.map(ad => (
-                    <AdCard key={ad.id} ad={ad} />
-                  ))}
+                <AdsTable ads={filteredAds} />
+              )}
+
+              {/* Still processing (polling timed out or stuck) */}
+              {!isLoadingAds && ads.length === 0 && activeSearch.status === 'processing' && (
+                <div className="text-center py-12 text-muted-foreground space-y-3">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-500 mx-auto" />
+                  <p className="text-sm">El agente sigue procesando en N8N...</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    Si lleva mas de 10 minutos, revisa la ejecucion en N8N para ver si hubo errores.
+                    Los anuncios apareceran aqui cuando el procesamiento termine.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs mt-2"
+                    onClick={() => activeSearch && selectSearch(activeSearch)}
+                  >
+                    Recargar anuncios
+                  </Button>
                 </div>
               )}
 
-              {/* No results */}
-              {!isLoadingAds && ads.length === 0 && activeSearch.status === 'completed' && (
+              {/* No results (completed or error) */}
+              {!isLoadingAds && ads.length === 0 && (activeSearch.status === 'completed' || activeSearch.status === 'error') && (
                 <div className="text-center py-12 text-muted-foreground space-y-2">
                   <p className="text-sm">No se encontraron anuncios para esta busqueda.</p>
                   {activeSearch.total_results != null && (

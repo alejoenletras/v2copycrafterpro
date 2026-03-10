@@ -195,32 +195,14 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "key", "value": "=PEGA_TU_GEMINI_API_KEY_AQUI" }
-          ]
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      { \"text\": \"Analyze this advertisement media in detail. Include: the visual style, the product/service being promoted, the target audience it appeals to, the emotional tone, and any text visible. If it's a video, describe the narrative flow. Output only the analysis in Spanish.\" },\n      { \"file_data\": { \"mime_type\": \"{{ $json.ad_type === 'video' ? 'video/mp4' : 'image/jpeg' }}\", \"file_uri\": \"{{ $json.media_url }}\" } }\n    ]\n  }],\n  \"generationConfig\": { \"maxOutputTokens\": 1024 }\n}",
-        "options": { "timeout": 60000 }
+        "jsCode": "// Download video + analyze with Gemini inline_data\nconst ad = $input.first().json;\nconst url = ad.media_url;\nconst GEMINI_KEY = 'PEGA_TU_GEMINI_API_KEY_AQUI';\n\nif (!url) {\n  return [{ json: { ...ad, media_description: null } }];\n}\n\ntry {\n  // Download video binary\n  const mediaRes = await fetch(url);\n  if (!mediaRes.ok) throw new Error('Download failed: ' + mediaRes.status);\n  const buffer = Buffer.from(await mediaRes.arrayBuffer());\n  const base64 = buffer.toString('base64');\n  console.log(`Video downloaded: ${(buffer.length / 1024 / 1024).toFixed(1)}MB`);\n\n  // Call Gemini with inline_data (NOT file_uri)\n  const geminiRes = await fetch(\n    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        contents: [{\n          parts: [\n            { text: 'Analiza este video publicitario en detalle. Incluye: estilo visual, producto/servicio promocionado, audiencia objetivo, tono emocional, textos visibles en pantalla, y flujo narrativo. Da indicaciones tecnicas sobre el formato del video (duracion estimada, tipo de edicion, ritmo). Responde solo en espanol.' },\n            { inline_data: { mime_type: 'video/mp4', data: base64 } }\n          ]\n        }],\n        generationConfig: { maxOutputTokens: 1500 }\n      })\n    }\n  );\n\n  const result = await geminiRes.json();\n  if (result.error) {\n    console.log('Gemini error:', JSON.stringify(result.error));\n    return [{ json: { ...ad, media_description: null } }];\n  }\n  const description = result.candidates?.[0]?.content?.parts?.[0]?.text || null;\n  return [{ json: { ...ad, media_description: description } }];\n} catch(e) {\n  console.log('Gemini video analysis failed:', e.message);\n  return [{ json: { ...ad, media_description: null } }];\n}"
       },
       "id": "gemini-video",
       "name": "Gemini (Video)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [2200, 340],
-      "notes": "Replace PEGA_TU_GEMINI_API_KEY_AQUI with your Google AI Studio API key.",
-      "onError": "continueRegularOutput"
+      "notes": "Downloads video, converts to base64, sends to Gemini via inline_data. Replace PEGA_TU_GEMINI_API_KEY_AQUI with your API key."
     },
     {
       "parameters": {
@@ -245,36 +227,18 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "key", "value": "=PEGA_TU_GEMINI_API_KEY_AQUI" }
-          ]
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      { \"text\": \"Analyze this advertisement image in detail. Include: the visual style, the product/service being promoted, the target audience it appeals to, the emotional tone, and any text visible in the image. Output only the analysis in Spanish.\" },\n      { \"file_data\": { \"mime_type\": \"image/jpeg\", \"file_uri\": \"{{ $json.media_url }}\" } }\n    ]\n  }],\n  \"generationConfig\": { \"maxOutputTokens\": 1024 }\n}",
-        "options": { "timeout": 30000 }
+        "jsCode": "// Download image + analyze with Gemini inline_data\nconst ad = $input.first().json;\nconst url = ad.media_url;\nconst GEMINI_KEY = 'PEGA_TU_GEMINI_API_KEY_AQUI';\n\nif (!url) {\n  return [{ json: { ...ad, media_description: null } }];\n}\n\ntry {\n  // Download image binary\n  const mediaRes = await fetch(url);\n  if (!mediaRes.ok) throw new Error('Download failed: ' + mediaRes.status);\n  const buffer = Buffer.from(await mediaRes.arrayBuffer());\n  const base64 = buffer.toString('base64');\n  console.log(`Image downloaded: ${(buffer.length / 1024).toFixed(0)}KB`);\n\n  // Detect mime type from URL\n  const mime = url.includes('.png') ? 'image/png' : url.includes('.webp') ? 'image/webp' : 'image/jpeg';\n\n  // Call Gemini with inline_data (NOT file_uri)\n  const geminiRes = await fetch(\n    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        contents: [{\n          parts: [\n            { text: 'Analiza esta imagen publicitaria en detalle. Incluye: estilo visual, producto/servicio promocionado, audiencia objetivo, tono emocional, textos visibles en la imagen, colores dominantes, y tipo de composicion. Da indicaciones tecnicas sobre el formato (dimensiones estimadas, tipo de grafico). Responde solo en espanol.' },\n            { inline_data: { mime_type: mime, data: base64 } }\n          ]\n        }],\n        generationConfig: { maxOutputTokens: 1500 }\n      })\n    }\n  );\n\n  const result = await geminiRes.json();\n  if (result.error) {\n    console.log('Gemini error:', JSON.stringify(result.error));\n    return [{ json: { ...ad, media_description: null } }];\n  }\n  const description = result.candidates?.[0]?.content?.parts?.[0]?.text || null;\n  return [{ json: { ...ad, media_description: description } }];\n} catch(e) {\n  console.log('Gemini image analysis failed:', e.message);\n  return [{ json: { ...ad, media_description: null } }];\n}"
       },
       "id": "gemini-image",
       "name": "Gemini (Image)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [2420, 540],
-      "notes": "Replace PEGA_TU_GEMINI_API_KEY_AQUI with your Google AI Studio API key.",
-      "onError": "continueRegularOutput"
+      "notes": "Downloads image, converts to base64, sends to Gemini via inline_data. Replace PEGA_TU_GEMINI_API_KEY_AQUI with your API key."
     },
     {
       "parameters": {
-        "jsCode": "const ad = $('Loop Ads').item.json;\n\nlet mediaDescription = null;\n\ntry {\n  const geminiRes = $input.first().json;\n  if (geminiRes.candidates && geminiRes.candidates[0]) {\n    mediaDescription = geminiRes.candidates[0].content?.parts?.[0]?.text || null;\n  }\n} catch(e) {}\n\nreturn [{\n  json: {\n    ...ad,\n    media_description: mediaDescription\n  }\n}];"
+        "jsCode": "// Pass through — Gemini code nodes already set media_description\n// For text-only ads (no media), media_description will be undefined\nconst input = $input.first().json;\nreturn [{ json: { ...input, media_description: input.media_description || null } }];"
       },
       "id": "merge-media-desc",
       "name": "Merge Media Desc",
@@ -344,42 +308,17 @@
     },
     {
       "parameters": {
-        "jsCode": "const ad = $('Extract Summary').item.json;\nlet rewrittenCopy = null;\n\ntry {\n  const res = $input.first().json;\n  const text = res.content?.[0]?.text || '';\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    const parsed = JSON.parse(match[0]);\n    rewrittenCopy = parsed.rewrittenAdCopy || parsed.rewritten_ad_copy || null;\n  } else {\n    rewrittenCopy = text;\n  }\n} catch(e) {}\n\nreturn [{\n  json: {\n    search_id: ad._search_id,\n    ad_archive_id: ad.ad_archive_id,\n    page_id: ad.page_id,\n    page_name: ad.page_name,\n    page_url: ad.page_url,\n    page_likes: ad.page_likes,\n    ad_start_date: ad.ad_start_date,\n    days_active: ad.days_active,\n    ad_type: ad.ad_type,\n    original_ad_copy: ad.original_ad_copy,\n    media_url: ad.media_url,\n    media_description: ad.media_description,\n    summary: ad.summary,\n    rewritten_copy: rewrittenCopy,\n    raw_data: ad.raw_data,\n    _supabase_url: ad._supabase_url,\n    _supabase_service_key: ad._supabase_service_key,\n    _search_id: ad._search_id,\n    _total_count: ad._total_count,\n    _filtered_count: ad._filtered_count\n  }\n}];"
+        "jsCode": "const ad = $('Extract Summary').item.json;\nlet rewrittenCopy = null;\n\ntry {\n  const res = $input.first().json;\n  const text = res.content?.[0]?.text || '';\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    const parsed = JSON.parse(match[0]);\n    rewrittenCopy = parsed.rewrittenAdCopy || parsed.rewritten_ad_copy || null;\n  } else {\n    rewrittenCopy = text;\n  }\n} catch(e) {}\n\n// Build save body\nconst saveBody = {\n  search_id: ad._search_id,\n  ad_archive_id: ad.ad_archive_id,\n  page_id: ad.page_id || 'unknown',\n  page_name: ad.page_name || 'Unknown',\n  page_url: ad.page_url || null,\n  page_likes: typeof ad.page_likes === 'number' ? ad.page_likes : null,\n  ad_start_date: ad.ad_start_date,\n  days_active: ad.days_active,\n  ad_type: ad.ad_type,\n  original_ad_copy: ad.original_ad_copy || null,\n  media_url: ad.media_url || null,\n  media_description: ad.media_description || null,\n  summary: ad.summary || null,\n  rewritten_copy: rewrittenCopy,\n  raw_data: ad.raw_data || null\n};\n\n// Save directly to Supabase via fetch (bypasses N8N HTTP node escaping issues)\nconst url = `${ad._supabase_url}/rest/v1/ads?on_conflict=ad_archive_id`;\ntry {\n  const saveRes = await fetch(url, {\n    method: 'POST',\n    headers: {\n      'Authorization': `Bearer ${ad._supabase_service_key}`,\n      'apikey': ad._supabase_service_key,\n      'Content-Type': 'application/json',\n      'Prefer': 'resolution=merge-duplicates,return=minimal'\n    },\n    body: JSON.stringify(saveBody)\n  });\n  if (!saveRes.ok) {\n    const errText = await saveRes.text();\n    console.log(`Save failed (${saveRes.status}): ${errText}`);\n  } else {\n    console.log(`Saved ad ${ad.ad_archive_id}`);\n  }\n} catch(e) {\n  console.log('Save error:', e.message);\n}\n\nreturn [{\n  json: {\n    ...saveBody,\n    _supabase_url: ad._supabase_url,\n    _supabase_service_key: ad._supabase_service_key,\n    _search_id: ad._search_id,\n    _total_count: ad._total_count,\n    _filtered_count: ad._filtered_count\n  }\n}];"
       },
       "id": "prepare-save",
-      "name": "Prepare Save",
+      "name": "Prepare & Save",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [3520, 440]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $json._supabase_url }}/rest/v1/ads",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Authorization", "value": "=Bearer {{ $json._supabase_service_key }}" },
-            { "name": "apikey", "value": "={{ $json._supabase_service_key }}" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "resolution=merge-duplicates,return=minimal" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"search_id\": \"{{ $json.search_id }}\",\n  \"ad_archive_id\": \"{{ $json.ad_archive_id }}\",\n  \"page_id\": \"{{ $json.page_id }}\",\n  \"page_name\": {{ JSON.stringify($json.page_name) }},\n  \"page_url\": {{ $json.page_url ? JSON.stringify($json.page_url) : 'null' }},\n  \"page_likes\": {{ $json.page_likes || 'null' }},\n  \"ad_start_date\": \"{{ $json.ad_start_date }}\",\n  \"days_active\": {{ $json.days_active }},\n  \"ad_type\": \"{{ $json.ad_type }}\",\n  \"original_ad_copy\": {{ $json.original_ad_copy ? JSON.stringify($json.original_ad_copy) : 'null' }},\n  \"media_url\": {{ $json.media_url ? JSON.stringify($json.media_url) : 'null' }},\n  \"media_description\": {{ $json.media_description ? JSON.stringify($json.media_description) : 'null' }},\n  \"summary\": {{ $json.summary ? JSON.stringify($json.summary) : 'null' }},\n  \"rewritten_copy\": {{ $json.rewritten_copy ? JSON.stringify($json.rewritten_copy) : 'null' }}\n}",
-        "options": {}
-      },
-      "id": "save-to-supabase",
-      "name": "Save to Supabase",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [3740, 440],
-      "notes": "Upsert ad by ad_archive_id (Prefer: resolution=merge-duplicates)"
-    },
-    {
-      "parameters": {
-        "jsCode": "const allItems = $('Prepare Save').all();\nconst first = allItems[0]?.json || {};\n\nreturn [{\n  json: {\n    search_id: first._search_id,\n    supabase_url: first._supabase_url,\n    supabase_service_key: first._supabase_service_key,\n    total_count: first._total_count || 0,\n    filtered_count: first._filtered_count || allItems.length\n  }\n}];"
+        "jsCode": "const allItems = $('Prepare & Save').all();\nconst first = allItems[0]?.json || {};\n\nreturn [{\n  json: {\n    search_id: first._search_id,\n    supabase_url: first._supabase_url,\n    supabase_service_key: first._supabase_service_key,\n    total_count: first._total_count || 0,\n    filtered_count: first._filtered_count || allItems.length\n  }\n}];"
       },
       "id": "prepare-final-update",
       "name": "Prepare Final Update",
@@ -475,12 +414,9 @@
       "main": [[{ "node": "Claude Opus (Rewrite)", "type": "main", "index": 0 }]]
     },
     "Claude Opus (Rewrite)": {
-      "main": [[{ "node": "Prepare Save", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Prepare & Save", "type": "main", "index": 0 }]]
     },
-    "Prepare Save": {
-      "main": [[{ "node": "Save to Supabase", "type": "main", "index": 0 }]]
-    },
-    "Save to Supabase": {
+    "Prepare & Save": {
       "main": [[{ "node": "Loop Ads", "type": "main", "index": 0 }]]
     },
     "Prepare Final Update": {
