@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useCompetitors } from '@/hooks/useCompetitors';
 import { CompetitorTable } from '@/components/competitors/CompetitorTable';
 import { CompetitorFilters } from '@/components/competitors/CompetitorFilters';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, Users, Loader2 } from 'lucide-react';
+import { Home, Users, Loader2, RefreshCw } from 'lucide-react';
 
 export default function CompetitorsPage() {
   const navigate = useNavigate();
-  const { competitors, isLoading, forceReEnrich, isReEnriching } = useCompetitors();
+  const { competitors, isLoading, forceReEnrich, isReEnriching, triggerEnrichment, isTriggering } = useCompetitors();
 
   const [search, setSearch] = useState('');
   const [igStatus, setIgStatus] = useState('all');
@@ -44,8 +45,21 @@ export default function CompetitorsPage() {
             <span className="font-semibold text-sm">Competidores</span>
           </div>
           {!isLoading && (
-            <Badge variant="secondary" className="ml-auto">{filtered.length} competidores</Badge>
+            <Badge variant="secondary" className="ml-2">{filtered.length} competidores</Badge>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto gap-1.5 text-xs"
+            onClick={triggerEnrichment}
+            disabled={isTriggering}
+          >
+            {isTriggering ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Iniciando...</>
+            ) : (
+              <><RefreshCw className="w-3.5 h-3.5" /> Enriquecer perfiles</>
+            )}
+          </Button>
         </div>
       </header>
 

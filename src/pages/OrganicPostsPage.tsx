@@ -4,8 +4,9 @@ import { useOrganicPosts } from '@/hooks/useOrganicPosts';
 import { useCompetitors } from '@/hooks/useCompetitors';
 import { OrganicPostsTable } from '@/components/organic-posts/OrganicPostsTable';
 import { OrganicPostFilters } from '@/components/organic-posts/OrganicPostFilters';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, FileText, Loader2 } from 'lucide-react';
+import { Home, FileText, Loader2, Download } from 'lucide-react';
 
 export default function OrganicPostsPage() {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export default function OrganicPostsPage() {
   const preFilterCompetitor = searchParams.get('competitor') || 'all';
 
   const { competitors } = useCompetitors();
-  const { posts, isLoading } = useOrganicPosts(preFilterCompetitor !== 'all' ? preFilterCompetitor : undefined);
+  const { posts, isLoading, triggerScraping, isTriggering } = useOrganicPosts(preFilterCompetitor !== 'all' ? preFilterCompetitor : undefined);
 
   const [platform, setPlatform] = useState('all');
   const [postType, setPostType] = useState('all');
@@ -43,8 +44,21 @@ export default function OrganicPostsPage() {
             <span className="font-semibold text-sm">Posts Orgánicos</span>
           </div>
           {!isLoading && (
-            <Badge variant="secondary" className="ml-auto">{filtered.length} posts</Badge>
+            <Badge variant="secondary" className="ml-2">{filtered.length} posts</Badge>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto gap-1.5 text-xs"
+            onClick={triggerScraping}
+            disabled={isTriggering}
+          >
+            {isTriggering ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Iniciando...</>
+            ) : (
+              <><Download className="w-3.5 h-3.5" /> Scrapear posts</>
+            )}
+          </Button>
         </div>
       </header>
 

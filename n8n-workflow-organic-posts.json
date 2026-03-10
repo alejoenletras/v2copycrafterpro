@@ -11,7 +11,21 @@
       "name": "Every 24 Hours",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300]
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hooq-organic-posts",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "hooq-organic-posts"
     },
     {
       "parameters": {
@@ -124,6 +138,9 @@
     "Every 24 Hours": {
       "main": [[{ "node": "Fetch Competitors with Profiles", "type": "main", "index": 0 }]]
     },
+    "Webhook": {
+      "main": [[{ "node": "Fetch Competitors with Profiles", "type": "main", "index": 0 }]]
+    },
     "Fetch Competitors with Profiles": {
       "main": [[{ "node": "Loop Tasks", "type": "main", "index": 0 }]]
     },
@@ -167,5 +184,5 @@
   },
   "staticData": null,
   "tags": [{ "name": "HOOQ" }],
-  "triggerCount": 1
+  "triggerCount": 2
 }

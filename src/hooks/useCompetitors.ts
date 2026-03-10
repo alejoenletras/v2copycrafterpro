@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { supabase, SUPABASE_KEY } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import type { CompetitorProfile } from '@/types';
+
+const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 
 export function useCompetitors() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [isTriggering, setIsTriggering] = useState(false);
 
   const { data: competitors, isLoading, error } = useQuery({
     queryKey: ['competitors'],
@@ -40,11 +44,36 @@ export function useCompetitors() {
     },
   });
 
+  const triggerEnrichment = async () => {
+    setIsTriggering(true);
+    try {
+      const res = await fetch(`${BASE_URL}/functions/v1/trigger-workflow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({ workflow: 'enrichment' }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to trigger enrichment');
+      }
+      toast({ description: 'Enriquecimiento iniciado. El agente buscara perfiles IG/TikTok...' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', description: err.message });
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
   return {
     competitors,
     isLoading,
     error,
     forceReEnrich: forceReEnrich.mutate,
     isReEnriching: forceReEnrich.isPending,
+    triggerEnrichment,
+    isTriggering,
   };
 }
