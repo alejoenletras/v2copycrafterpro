@@ -10,7 +10,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Home, Plus, Pencil, Trash2, Loader2, Users2, Instagram, Radio } from 'lucide-react';
+import { Home, Plus, Pencil, Trash2, Loader2, Users2, Instagram, Radio, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Referente, ReferenteIgStatus, ReferenteTikTokStatus } from '@/types';
 
@@ -146,7 +146,7 @@ function ReferenteDialog({ open, onClose, editing, onSave, isSaving }: Referente
 // ─── Main Page ────────────────────────────────────────────────
 export default function ReferentesPage() {
   const navigate = useNavigate();
-  const { referentes, isLoading, createReferente, isCreating, updateReferente, isUpdating, deleteReferente } = useReferentes();
+  const { referentes, isLoading, createReferente, isCreating, updateReferente, isUpdating, deleteReferente, scrapeReferente, isScraping, scrapingId } = useReferentes();
 
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Referente | null>(null);
@@ -224,7 +224,7 @@ export default function ReferentesPage() {
                   <th className="px-4 py-3 font-medium">Instagram</th>
                   <th className="px-4 py-3 font-medium">TikTok</th>
                   <th className="px-4 py-3 font-medium">Facebook</th>
-                  <th className="px-4 py-3 font-medium w-24">Acciones</th>
+                  <th className="px-4 py-3 font-medium w-32">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -263,6 +263,16 @@ export default function ReferentesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost" size="sm" className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700"
+                          onClick={() => scrapeReferente(ref.id)}
+                          disabled={isScraping && scrapingId === ref.id}
+                          title="Scrapear contenido (FB Ads + IG + TikTok)"
+                        >
+                          {isScraping && scrapingId === ref.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Download className="w-3.5 h-3.5" />}
+                        </Button>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditing(ref)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>

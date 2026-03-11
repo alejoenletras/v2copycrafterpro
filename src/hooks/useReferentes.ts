@@ -3,6 +3,9 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import type { Referente } from '@/types';
 
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
 export function useReferentes() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -81,6 +84,33 @@ export function useReferentes() {
     },
   });
 
+  const scrapeReferente = useMutation({
+    mutationFn: async (referenteId: string) => {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/trigger-referente-scrape`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'apikey': SUPABASE_KEY,
+        },
+        body: JSON.stringify({ referente_id: referenteId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? 'Error al iniciar scraping');
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['referentes'] });
+      toast({
+        title: 'Scraping iniciado',
+        description: `${data.message ?? ''} Plataformas: ${(data.platforms ?? []).join(', ')}.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error al scrapear', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     referentes,
     isLoading,
@@ -91,5 +121,8 @@ export function useReferentes() {
     isUpdating: updateReferente.isPending,
     deleteReferente: deleteReferente.mutate,
     isDeleting: deleteReferente.isPending,
+    scrapeReferente: scrapeReferente.mutate,
+    isScraping: scrapeReferente.isPending,
+    scrapingId: scrapeReferente.isPending ? (scrapeReferente.variables as string) : null,
   };
 }

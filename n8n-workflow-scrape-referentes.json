@@ -1,0 +1,72 @@
+{
+  "name": "HOOQ Scrape Referentes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hooq-scrape-referentes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-scrape",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "hooq-scrape-referentes"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Scraping started\" }",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Scrape all available platforms for this referente\nconst body = $('Webhook').item.json.body || $('Webhook').item.json;\nconst { referente, apify_token, supabase_url, supabase_key, anthropic_key } = body;\n\nconsole.log(`Starting scrape for referente: ${referente.name}`);\n\nconst allContent = [];\n\n// ─── Instagram scrape ─────────────────────────────────────────\nif (referente.ig_handle) {\n  console.log(`Scraping Instagram: @${referente.ig_handle}`);\n  try {\n    const igResults = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `https://api.apify.com/v2/acts/apify~instagram-post-scraper/run-sync-get-dataset-items?token=${apify_token}&timeout=90`,\n      body: {\n        directUrls: [`https://www.instagram.com/${referente.ig_handle}/`],\n        resultsType: 'posts',\n        resultsLimit: 30\n      },\n      json: true,\n      timeout: 120000\n    });\n\n    for (const post of (Array.isArray(igResults) ? igResults : [])) {\n      const views = post.videoPlayCount || 0;\n      const likes = post.likesCount || 0;\n      const isVideo = post.type === 'Video';\n      const isCarousel = post.type === 'Sidecar';\n\n      // Filter: videos >= 50k views OR images/carousels >= 5k likes\n      if ((isVideo && views >= 50000) || (!isVideo && likes >= 5000)) {\n        allContent.push({\n          referente_id: referente.id,\n          platform: 'instagram',\n          content_type: isVideo ? 'video' : (isCarousel ? 'carousel' : 'image'),\n          source_type: 'organic',\n          post_url: post.url || null,\n          post_id: post.id ? `ig_${post.id}` : `ig_${Date.now()}_${Math.random().toString(36).slice(2)}`,\n          posted_at: post.timestamp || null,\n          views: views,\n          likes: likes,\n          comments: post.commentsCount || 0,\n          shares: 0,\n          original_caption: post.caption || '',\n          media_url: post.videoUrl || post.displayUrl || null,\n          thumbnail_url: post.displayUrl || null,\n          is_used: false\n        });\n      }\n    }\n    console.log(`Instagram: ${allContent.filter(c => c.platform === 'instagram').length} posts passed filter`);\n  } catch(e) {\n    console.log('Instagram scrape error:', e.message);\n  }\n}\n\n// ─── TikTok scrape ────────────────────────────────────────────\nif (referente.tiktok_handle) {\n  console.log(`Scraping TikTok: @${referente.tiktok_handle}`);\n  try {\n    const tkResults = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `https://api.apify.com/v2/acts/clockworks~free-tiktok-scraper/run-sync-get-dataset-items?token=${apify_token}&timeout=90`,\n      body: {\n        profiles: [referente.tiktok_handle],\n        resultsPerPage: 30\n      },\n      json: true,\n      timeout: 120000\n    });\n\n    for (const post of (Array.isArray(tkResults) ? tkResults : [])) {\n      const views = post.playCount || post.stats?.playCount || 0;\n      if (views >= 50000) {\n        allContent.push({\n          referente_id: referente.id,\n          platform: 'tiktok',\n          content_type: 'video',\n          source_type: 'organic',\n          post_url: post.webVideoUrl || null,\n          post_id: post.id ? `tk_${post.id}` : `tk_${Date.now()}_${Math.random().toString(36).slice(2)}`,\n          posted_at: post.createTimeISO || null,\n          views: views,\n          likes: post.diggCount || post.stats?.diggCount || 0,\n          comments: post.commentCount || post.stats?.commentCount || 0,\n          shares: post.shareCount || post.stats?.shareCount || 0,\n          original_caption: post.text || '',\n          media_url: post.videoMeta?.playAddr || null,\n          thumbnail_url: post.videoMeta?.coverUrl || null,\n          is_used: false\n        });\n      }\n    }\n    console.log(`TikTok: ${allContent.filter(c => c.platform === 'tiktok').length} posts passed filter`);\n  } catch(e) {\n    console.log('TikTok scrape error:', e.message);\n  }\n}\n\n// ─── Facebook Ads Library scrape ──────────────────────────────\nif (referente.fb_page_url) {\n  console.log(`Scraping Facebook Ads: ${referente.fb_page_url}`);\n  try {\n    const fbResults = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `https://api.apify.com/v2/acts/apify~facebook-ads-library-scraper/run-sync-get-dataset-items?token=${apify_token}&timeout=90`,\n      body: {\n        adLibraryQuery: referente.fb_page_url,\n        maxAds: 30,\n        countryCode: 'ALL'\n      },\n      json: true,\n      timeout: 120000\n    });\n\n    for (const ad of (Array.isArray(fbResults) ? fbResults : [])) {\n      const daysActive = ad.daysActive || 0;\n      if (daysActive >= 3) {\n        allContent.push({\n          referente_id: referente.id,\n          platform: 'facebook_ads',\n          content_type: ad.isVideo ? 'video' : 'image',\n          source_type: 'paid',\n          post_url: ad.adUrl || null,\n          post_id: ad.adArchiveId ? `fb_${ad.adArchiveId}` : `fb_${Date.now()}_${Math.random().toString(36).slice(2)}`,\n          posted_at: null,\n          views: 0,\n          likes: 0,\n          comments: 0,\n          shares: 0,\n          days_active: daysActive,\n          original_caption: ad.adText || ad.body || '',\n          media_url: ad.videoUrl || ad.imageUrl || null,\n          thumbnail_url: ad.imageUrl || null,\n          is_used: false\n        });\n      }\n    }\n    console.log(`FB Ads: ${allContent.filter(c => c.platform === 'facebook_ads').length} ads passed filter`);\n  } catch(e) {\n    console.log('Facebook Ads scrape error:', e.message);\n  }\n}\n\nconsole.log(`Total scraped: ${allContent.length} pieces for ${referente.name}`);\nreturn [{ json: { allContent, referente, supabase_url, supabase_key, anthropic_key } }];"
+      },
+      "id": "scrape-platforms",
+      "name": "Scrape Platforms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze each piece with Claude Sonnet and save to referente_content\nconst { allContent, referente, supabase_url, supabase_key, anthropic_key } = $input.first().json;\n\nif (!allContent || allContent.length === 0) {\n  console.log('No content to analyze for', referente.name);\n  // Update referente status to reflect scraping was done\n  const statusUpdate = {};\n  if (referente.ig_handle) statusUpdate.ig_status = 'not_found';\n  if (referente.tiktok_handle) statusUpdate.tiktok_status = 'not_found';\n  if (Object.keys(statusUpdate).length > 0) {\n    try {\n      await this.helpers.httpRequest({\n        method: 'PATCH',\n        url: `${supabase_url}/rest/v1/referentes?id=eq.${referente.id}`,\n        headers: { 'Authorization': `Bearer ${supabase_key}`, 'apikey': supabase_key, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },\n        body: statusUpdate,\n        json: true\n      });\n    } catch(e) { console.log('Status update error:', e.message); }\n  }\n  return [{ json: { done: true, saved: 0, total: 0, referente: referente.name } }];\n}\n\nlet savedCount = 0;\n\nfor (const content of allContent) {\n  let quality_score = 5;\n  let strategic_analysis = null;\n  let content_structure = null;\n\n  // Analyze with Claude Sonnet\n  try {\n    const caption = (content.original_caption || '').substring(0, 800);\n    const metrics = [\n      content.views > 0 ? `Vistas: ${content.views.toLocaleString()}` : '',\n      content.likes > 0 ? `Likes: ${content.likes.toLocaleString()}` : '',\n      content.comments > 0 ? `Comentarios: ${content.comments.toLocaleString()}` : '',\n      content.days_active > 0 ? `Días activo: ${content.days_active}` : ''\n    ].filter(Boolean).join(' | ');\n\n    const analysisRes = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://api.anthropic.com/v1/messages',\n      headers: {\n        'x-api-key': anthropic_key,\n        'anthropic-version': '2023-06-01',\n        'Content-Type': 'application/json'\n      },\n      body: {\n        model: 'claude-sonnet-4-5-20250929',\n        max_tokens: 500,\n        system: 'Eres un experto en análisis estratégico de contenido publicitario y orgánico de redes sociales. Responde ÚNICAMENTE con JSON válido, sin backticks ni texto adicional.',\n        messages: [{\n          role: 'user',\n          content: `Analiza este contenido de ${content.platform} (${content.content_type}, ${content.source_type}):\\n\\nTexto/Caption: ${caption || 'Sin caption'}\\nMétricas: ${metrics || 'Sin métricas'}\\n\\nResponde SOLO con este JSON:\\n{\\n  \"quality_score\": 7,\\n  \"strategic_analysis\": \"Por qué funciona este contenido y qué elemento lo hace ganador (hook, estructura, CTA, prueba social, etc.).\",\\n  \"content_structure\": \"Tipo de hook usado, estructura del cuerpo (problema-solución, contraste, demostración, etc.), tipo de CTA.\"\\n}`\n        }]\n      },\n      json: true,\n      timeout: 30000\n    });\n\n    const text = analysisRes.content?.[0]?.text || '';\n    const match = text.match(/\\{[\\s\\S]*\\}/);\n    if (match) {\n      const parsed = JSON.parse(match[0]);\n      quality_score = Math.min(10, Math.max(1, parsed.quality_score || 5));\n      strategic_analysis = parsed.strategic_analysis || null;\n      content_structure = parsed.content_structure || null;\n    }\n  } catch(e) {\n    console.log('Analysis error:', e.message);\n  }\n\n  // Upsert to referente_content (dedup by platform + post_id)\n  try {\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: `${supabase_url}/rest/v1/referente_content`,\n      headers: {\n        'Authorization': `Bearer ${supabase_key}`,\n        'apikey': supabase_key,\n        'Content-Type': 'application/json',\n        'Prefer': 'resolution=merge-duplicates,return=minimal'\n      },\n      body: {\n        ...content,\n        quality_score,\n        strategic_analysis,\n        content_structure,\n        analyzed_at: new Date().toISOString()\n      },\n      json: true\n    });\n    savedCount++;\n  } catch(e) {\n    console.log('Save error:', e.message);\n  }\n}\n\n// Update referente scraping status\nconst statusUpdate = {};\nconst igSaved = allContent.filter(c => c.platform === 'instagram').length;\nconst tkSaved = allContent.filter(c => c.platform === 'tiktok').length;\nif (referente.ig_handle) statusUpdate.ig_status = igSaved > 0 ? 'found' : 'not_found';\nif (referente.tiktok_handle) statusUpdate.tiktok_status = tkSaved > 0 ? 'found' : 'not_found';\n\nif (Object.keys(statusUpdate).length > 0) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'PATCH',\n      url: `${supabase_url}/rest/v1/referentes?id=eq.${referente.id}`,\n      headers: { 'Authorization': `Bearer ${supabase_key}`, 'apikey': supabase_key, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },\n      body: statusUpdate,\n      json: true\n    });\n  } catch(e) { console.log('Status update error:', e.message); }\n}\n\nconsole.log(`Saved ${savedCount}/${allContent.length} pieces for ${referente.name}`);\nreturn [{ json: { done: true, saved: savedCount, total: allContent.length, referente: referente.name } }];"
+      },
+      "id": "analyze-save",
+      "name": "Analyze & Save",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+    },
+    "Respond OK": {
+      "main": [[{ "node": "Scrape Platforms", "type": "main", "index": 0 }]]
+    },
+    "Scrape Platforms": {
+      "main": [[{ "node": "Analyze & Save", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [{ "name": "HOOQ" }],
+  "triggerCount": 1
+}
