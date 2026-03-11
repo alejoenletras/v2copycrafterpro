@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Plus, Home, Loader2, Mic, Users, Package, Star, Copy, Trash2,
-  Pencil, Check, X, Sparkles, ChevronRight, AlertCircle, Brain, Pen,
+  Pencil, Check, X, Sparkles, ChevronRight, AlertCircle, Brain, Pen, Users2,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import type { DNAType, DnaFieldStatus } from '@/types';
 import DnaAutoModePanel from '@/components/dnas/DnaAutoModePanel';
+import ReferentesTab from '@/components/dnas/ReferentesTab';
 
 // ─── Field definitions per DNA type ──────────────────────────────────────────
 
@@ -124,7 +125,7 @@ export default function DNAsPage() {
   const { dnas, isLoading, createDNAAsync, updateDNAAsync, deleteDNA, isDeleting, setDefault, unsetDefault, duplicateDNA } = useDNAs();
 
   const [selectedDna, setSelectedDna] = useState<any | null>(null);
-  const [panelMode, setPanelMode] = useState<'manual' | 'auto'>('auto');
+  const [panelMode, setPanelMode] = useState<'manual' | 'auto' | 'referentes'>('auto');
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState('');
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -476,6 +477,17 @@ export default function DNAsPage() {
                 >
                   <Pen className="w-3.5 h-3.5" /> Manual
                 </button>
+                {selectedDna.type === 'expert' && (
+                  <button
+                    onClick={() => setPanelMode('referentes')}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                      panelMode === 'referentes' ? 'bg-background shadow-sm text-violet-700' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Users2 className="w-3.5 h-3.5" /> Referentes
+                  </button>
+                )}
               </div>
 
               {/* AUTO MODE */}
@@ -521,6 +533,11 @@ export default function DNAsPage() {
                     ))}
                   </div>
                 </>
+              )}
+
+              {/* REFERENTES MODE */}
+              {panelMode === 'referentes' && selectedDna.type === 'expert' && (
+                <ReferentesTab personalityDnaId={selectedDna.id} />
               )}
 
               {/* Save button (only in manual mode) */}

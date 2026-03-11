@@ -583,6 +583,117 @@ export interface AgentChatResponse {
   suggested_buttons?: Array<{ label: string; value: string }>;
 }
 
+// ===== HOOQ v3 — Motor de Modelado con DNAs =====
+
+export type ReferenteIgStatus = 'found' | 'not_found' | 'pending' | 'manual';
+export type ReferenteTikTokStatus = 'found' | 'not_found' | 'pending' | 'manual';
+
+export interface Referente {
+  id: string;
+  created_at: string;
+  name: string;
+  description: string | null;
+  fb_page_name: string | null;
+  fb_page_url: string | null;
+  ig_handle: string | null;
+  ig_profile_url: string | null;
+  tiktok_handle: string | null;
+  tiktok_profile_url: string | null;
+  ig_status: ReferenteIgStatus;
+  tiktok_status: ReferenteTikTokStatus;
+}
+
+export interface DnaReferenteRule {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  personality_dna_id: string | null;
+  audience_dna_id: string | null;
+  product_dna_id: string | null;
+  referente_id: string;
+  what_to_model: string;
+  what_to_filter: string;
+  priority: number;
+  is_active: boolean;
+  referentes?: Referente;
+}
+
+export type ReferenteContentPlatform = 'facebook_ads' | 'instagram' | 'tiktok';
+export type ReferenteContentType = 'video' | 'image' | 'carousel' | 'text';
+export type ReferenteSourceType = 'paid' | 'organic';
+
+export interface ReferenteContent {
+  id: string;
+  created_at: string;
+  referente_id: string;
+  referente_name?: string;
+  platform: ReferenteContentPlatform;
+  content_type: ReferenteContentType;
+  source_type: ReferenteSourceType;
+  post_url: string | null;
+  post_id: string | null;
+  posted_at: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  days_active: number | null;
+  original_caption: string | null;
+  media_url: string | null;
+  thumbnail_url: string | null;
+  transcript: string | null;
+  media_analysis: string | null;
+  strategic_analysis: string | null;
+  content_structure: string | null;
+  quality_score: number | null;
+  analyzed_at: string | null;
+  is_used: boolean;
+}
+
+export type ScriptFormat = 'video_script' | 'written_ad' | 'carousel_script';
+export type ScriptTargetPlatform = 'facebook' | 'instagram' | 'tiktok' | 'multi';
+export type ScriptStatus = 'draft' | 'approved' | 'rejected' | 'used';
+
+export interface ModeledScriptV3 {
+  id: string;
+  created_at: string;
+  personality_dna_id: string | null;
+  audience_dna_id: string | null;
+  product_dna_id: string | null;
+  source_content_id: string | null;
+  referente_id: string | null;
+  referente_name: string | null;
+  hook_1: string;
+  hook_2: string | null;
+  body: string;
+  cta: string;
+  production_notes: string | null;
+  script_format: ScriptFormat | null;
+  target_platform: ScriptTargetPlatform | null;
+  what_was_modeled: string | null;
+  why_it_works: string | null;
+  how_adapted: string | null;
+  status: ScriptStatus;
+  google_doc_url: string | null;
+  model_used: string | null;
+}
+
+export type GenerationRunStatus = 'running' | 'completed' | 'failed';
+
+export interface GenerationRun {
+  id: string;
+  started_at: string;
+  completed_at: string | null;
+  personality_dna_id: string | null;
+  audience_dna_id: string | null;
+  product_dna_id: string | null;
+  requested_count: number;
+  generated_count: number;
+  status: GenerationRunStatus;
+  error_message: string | null;
+  google_doc_url: string | null;
+}
+
 // ===== HOOQ v2 — Multi-Platform Types =====
 
 export interface CompetitorProfile {

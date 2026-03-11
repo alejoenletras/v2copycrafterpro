@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Loader2, AlertCircle, CheckCircle, Mic, Users, Package,
   ArrowRight, Dna, Zap, Sparkles, Bot, BookOpen, Video,
-  Activity, FileText,
+  Activity, FileText, Users2, Library,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -310,6 +310,65 @@ export default function DashboardPage() {
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground/50 shrink-0 group-hover:text-violet-600 transition-colors" />
               </button>
+            </section>
+
+            {/* ── Motor de Modelado ──────────────────────── */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground">Motor de Modelado</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Modela contenido de referentes con tus DNAs para generar guiones listos para producción.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  onClick={() => navigate('/referentes')}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:shadow-md transition-all text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                    <Users2 className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-emerald-700">Referentes</p>
+                    <p className="text-xs text-muted-foreground truncate">Creadores que modelamos</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                </button>
+
+                <button
+                  onClick={() => navigate('/content-bank')}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-teal-200 bg-teal-50 hover:shadow-md transition-all text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
+                    <Library className="w-4 h-4 text-teal-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-teal-700">Banco de Contenido</p>
+                    <p className="text-xs text-muted-foreground truncate">Contenido scrapeado</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                </button>
+
+                <button
+                  onClick={() => navigate('/scripts')}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-cyan-200 bg-cyan-50 hover:shadow-md transition-all text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-cyan-100 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-cyan-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-cyan-700">Guiones Modelados</p>
+                    <p className="text-xs text-muted-foreground truncate">Listos para producción</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                </button>
+              </div>
             </section>
 
             {/* ── HOOQ v2: Multi-Plataforma ──────────────── */}

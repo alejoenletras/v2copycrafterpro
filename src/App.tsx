@@ -12,6 +12,9 @@ import VideoInspirationPage from "./pages/VideoInspirationPage";
 import CompetitorsPage from "./pages/CompetitorsPage";
 import OrganicPostsPage from "./pages/OrganicPostsPage";
 import RunsPage from "./pages/RunsPage";
+import ReferentesPage from "./pages/ReferentesPage";
+import ContentBankPage from "./pages/ContentBankPage";
+import ModeledScriptsPage from "./pages/ModeledScriptsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +35,9 @@ const App = () => (
           <Route path="/competitors" element={<CompetitorsPage />} />
           <Route path="/organic-posts" element={<OrganicPostsPage />} />
           <Route path="/runs" element={<RunsPage />} />
+          <Route path="/referentes" element={<ReferentesPage />} />
+          <Route path="/content-bank" element={<ContentBankPage />} />
+          <Route path="/scripts" element={<ModeledScriptsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
