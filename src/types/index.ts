@@ -601,6 +601,7 @@ export interface Referente {
   tiktok_profile_url: string | null;
   ig_status: ReferenteIgStatus;
   tiktok_status: ReferenteTikTokStatus;
+  source: 'user' | 'ai_suggested';
 }
 
 export interface DnaReferenteRule {
@@ -611,8 +612,11 @@ export interface DnaReferenteRule {
   audience_dna_id: string | null;
   product_dna_id: string | null;
   referente_id: string;
-  what_to_model: string;
-  what_to_filter: string;
+  what_to_model: string | null;
+  what_to_filter: string | null;
+  alignment_analysis: string | null;
+  alignment_score: number | null;
+  rules_generated_at: string | null;
   priority: number;
   is_active: boolean;
   referentes?: Referente;
@@ -663,6 +667,8 @@ export interface ModeledScriptV3 {
   source_content_id: string | null;
   referente_id: string | null;
   referente_name: string | null;
+  source_url: string | null;
+  generation_run_id: string | null;
   hook_1: string;
   hook_2: string | null;
   body: string;
@@ -692,6 +698,28 @@ export interface GenerationRun {
   status: GenerationRunStatus;
   error_message: string | null;
   google_doc_url: string | null;
+  is_scheduled: boolean;
+  schedule_frequency: 'daily' | 'weekly' | 'biweekly' | null;
+}
+
+export type ScheduleFrequency = 'daily' | 'weekly' | 'biweekly';
+export type ScriptFormatSimple = 'video_script' | 'written_ad';
+
+export interface ScheduledGeneration {
+  id: string;
+  created_at: string;
+  personality_dna_id: string;
+  audience_dna_id: string;
+  product_dna_id: string;
+  scripts_per_run: number;
+  script_format: ScriptFormatSimple;
+  frequency: ScheduleFrequency;
+  is_active: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  delivery_email: string | null;
+  delivery_telegram: boolean;
+  delivery_google_doc: boolean;
 }
 
 // ===== HOOQ v2 — Multi-Platform Types =====

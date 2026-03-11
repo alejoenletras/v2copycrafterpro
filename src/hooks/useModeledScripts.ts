@@ -5,13 +5,14 @@ import type { ModeledScriptV3, ScriptStatus } from '@/types';
 
 interface UseModeledScriptsOptions {
   personalityDnaId?: string;
+  runId?: string;
   status?: ScriptStatus;
 }
 
 export function useModeledScripts(options: UseModeledScriptsOptions = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { personalityDnaId, status } = options;
+  const { personalityDnaId, runId, status } = options;
 
   const { data: scripts = [], isLoading, error } = useQuery({
     queryKey: ['modeled-scripts', options],
@@ -21,7 +22,8 @@ export function useModeledScripts(options: UseModeledScriptsOptions = {}) {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (personalityDnaId) q = q.eq('personality_dna_id', personalityDnaId);
+      if (runId) q = q.eq('generation_run_id', runId);
+      else if (personalityDnaId) q = q.eq('personality_dna_id', personalityDnaId);
       if (status) q = q.eq('status', status);
 
       const { data, error } = await q;
