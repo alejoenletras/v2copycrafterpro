@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReferentes } from '@/hooks/useReferentes';
+import { useReferenteContent } from '@/hooks/useReferenteContent';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -10,9 +11,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Home, Plus, Pencil, Trash2, Loader2, Users2, Instagram, Radio, Download } from 'lucide-react';
+import { Home, Plus, Pencil, Trash2, Loader2, Users2, Instagram, Radio, Download, ChevronDown, ChevronUp, Eye, Heart, MessageCircle, ExternalLink, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Referente, ReferenteIgStatus, ReferenteTikTokStatus } from '@/types';
+import type { Referente, ReferenteIgStatus, ReferenteTikTokStatus, ReferenteContent, ReferenteContentPlatform } from '@/types';
 
 // ─── Status Badge ────────────────────────────────────────────
 function StatusBadge({ status }: { status: ReferenteIgStatus | ReferenteTikTokStatus }) {
@@ -24,6 +25,142 @@ function StatusBadge({ status }: { status: ReferenteIgStatus | ReferenteTikTokSt
   };
   const { label, color } = map[status] ?? map.pending;
   return <Badge variant="outline" className={cn('text-xs', color)}>{label}</Badge>;
+}
+
+// ─── Quality Badge ────────────────────────────────────────────
+function QualityBadge({ score }: { score: number | null }) {
+  if (score == null) return null;
+  if (score >= 8) return <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200">{score}/10</Badge>;
+  if (score >= 5) return <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200">{score}/10</Badge>;
+  return <Badge className="text-xs bg-red-100 text-red-700 border-red-200">{score}/10</Badge>;
+}
+
+// ─── Platform Icon ────────────────────────────────────────────
+function PlatformIcon({ platform }: { platform: ReferenteContentPlatform }) {
+  if (platform === 'instagram') return <Instagram className="w-3.5 h-3.5 text-pink-500" />;
+  if (platform === 'tiktok') return <Radio className="w-3.5 h-3.5 text-slate-600" />;
+  return <span className="text-xs font-bold text-blue-600">f</span>;
+}
+
+function fmt(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return String(n);
+}
+
+// ─── Content Card ─────────────────────────────────────────────
+function ContentCard({ item }: { item: ReferenteContent }) {
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
+  return (
+    <div className="border rounded-lg p-3 space-y-2 bg-background hover:bg-muted/20 transition-colors">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <PlatformIcon platform={item.platform} />
+          <Badge variant="outline" className="text-xs capitalize">{item.content_type}</Badge>
+          <QualityBadge score={item.quality_score} />
+          {item.is_used && <Badge className="text-xs bg-violet-100 text-violet-700 border-violet-200">Usado</Badge>}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+          {item.views > 0 && <span className="flex items-center gap-0.5"><Eye className="w-3 h-3" />{fmt(item.views)}</span>}
+          {item.likes > 0 && <span className="flex items-center gap-0.5"><Heart className="w-3 h-3" />{fmt(item.likes)}</span>}
+          {item.comments > 0 && <span className="flex items-center gap-0.5"><MessageCircle className="w-3 h-3" />{fmt(item.comments)}</span>}
+          {item.post_url && (
+            <a href={item.post_url} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {item.original_caption && (
+        <p className="text-xs text-muted-foreground line-clamp-2">{item.original_caption}</p>
+      )}
+
+      {item.strategic_analysis && (
+        <div>
+          <button
+            onClick={() => setShowAnalysis(s => !s)}
+            className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium"
+          >
+            <Sparkles className="w-3 h-3" />
+            {showAnalysis ? 'Ocultar análisis' : 'Ver análisis estratégico'}
+            {showAnalysis ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {showAnalysis && (
+            <p className="text-xs text-muted-foreground mt-1 pl-4 border-l-2 border-violet-200">{item.strategic_analysis}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Content Panel ────────────────────────────────────────────
+const PLATFORMS: { key: ReferenteContentPlatform | 'all'; label: string }[] = [
+  { key: 'all', label: 'Todo' },
+  { key: 'facebook_ads', label: 'Facebook Ads' },
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'tiktok', label: 'TikTok' },
+];
+
+function ContentPanel({ referenteId }: { referenteId: string }) {
+  const [platform, setPlatform] = useState<ReferenteContentPlatform | 'all'>('all');
+  const { content, isLoading } = useReferenteContent({
+    referenteId,
+    platform: platform === 'all' ? undefined : platform,
+  });
+
+  const counts = {
+    all: content.length,
+    facebook_ads: content.filter(c => c.platform === 'facebook_ads').length,
+    instagram: content.filter(c => c.platform === 'instagram').length,
+    tiktok: content.filter(c => c.platform === 'tiktok').length,
+  };
+
+  // When filtered, use all loaded content (filter client-side for tab counts)
+  const filtered = platform === 'all' ? content : content.filter(c => c.platform === platform);
+
+  return (
+    <div className="p-4 bg-muted/20 border-t space-y-3">
+      {/* Platform tabs */}
+      <div className="flex items-center gap-1 flex-wrap">
+        {PLATFORMS.map(p => (
+          <button
+            key={p.key}
+            onClick={() => setPlatform(p.key)}
+            className={cn(
+              'px-3 py-1 rounded-full text-xs font-medium transition-colors',
+              platform === p.key
+                ? 'bg-violet-600 text-white'
+                : 'bg-muted hover:bg-muted/80 text-muted-foreground',
+            )}
+          >
+            {p.label}
+            {counts[p.key] > 0 && (
+              <span className={cn('ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]',
+                platform === p.key ? 'bg-white/20' : 'bg-background'
+              )}>{counts[p.key]}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Download className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">Sin contenido scrapeado todavía.</p>
+          <p className="text-xs mt-1">Usa el botón ↓ para iniciar el scraping.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map(item => <ContentCard key={item.id} item={item} />)}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Referente Form ───────────────────────────────────────────
@@ -151,6 +288,7 @@ export default function ReferentesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Referente | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handleCreate = async (form: ReferenteForm) => {
     await createReferente({
@@ -229,12 +367,24 @@ export default function ReferentesPage() {
               </thead>
               <tbody className="divide-y">
                 {referentes.map((ref) => (
-                  <tr key={ref.id} className="hover:bg-muted/30 transition-colors">
+                  <>
+                  <tr
+                    key={ref.id}
+                    className="hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => setExpandedId(expandedId === ref.id ? null : ref.id)}
+                  >
                     <td className="px-4 py-3">
-                      <p className="font-medium">{ref.name}</p>
-                      {ref.description && (
-                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{ref.description}</p>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {expandedId === ref.id
+                          ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                        <div>
+                          <p className="font-medium">{ref.name}</p>
+                          {ref.description && (
+                            <p className="text-xs text-muted-foreground truncate max-w-[180px]">{ref.description}</p>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
@@ -261,7 +411,7 @@ export default function ReferentesPage() {
                         <span className="text-xs">{ref.fb_page_name}</span>
                       ) : <span className="text-xs text-muted-foreground">—</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         <Button
                           variant="ghost" size="sm" className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700"
@@ -282,6 +432,14 @@ export default function ReferentesPage() {
                       </div>
                     </td>
                   </tr>
+                  {expandedId === ref.id && (
+                    <tr key={`${ref.id}-panel`}>
+                      <td colSpan={5} className="p-0">
+                        <ContentPanel referenteId={ref.id} />
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 ))}
               </tbody>
             </table>
