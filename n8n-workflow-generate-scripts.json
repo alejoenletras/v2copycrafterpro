@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "webhookId": "hooq-generate-scripts"
     },
     {
@@ -25,29 +28,42 @@
       "name": "Respond OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Prepare generation context and split into tasks (one per content piece)\nconst body = $('Webhook').item.json.body || $('Webhook').item.json;\n\nconst {\n  generation_run_id,\n  personality_dna_id,\n  audience_dna_id,\n  product_dna_id,\n  count,\n  script_format,\n  target_platform,\n  personality_dna,\n  audience_dna,\n  product_dna,\n  rules,\n  content,\n  supabase_url,\n  supabase_service_key\n} = body;\n\nconsole.log(`Generation run ${generation_run_id}: ${content?.length || 0} content pieces, ${rules?.length || 0} rules`);\n\nif (!content || content.length === 0) {\n  console.log('No content available to model. Checking for rules...');\n  // Return a single task to handle the no-content case\n  return [{\n    json: {\n      _no_content: true,\n      _run_id: generation_run_id,\n      _supabase_url: supabase_url,\n      _supabase_key: supabase_service_key\n    }\n  }];\n}\n\n// Build one task per content piece, matched to its referente rule\nconst tasks = [];\nconst maxTasks = Math.min(content.length, count || 10);\n\nfor (let i = 0; i < maxTasks; i++) {\n  const piece = content[i];\n  const rule = rules?.find(r => r.referente_id === piece.referente_id) || rules?.[0] || null;\n\n  tasks.push({\n    json: {\n      _run_id: generation_run_id,\n      _supabase_url: supabase_url,\n      _supabase_key: supabase_service_key,\n      _personality_dna: personality_dna,\n      _audience_dna: audience_dna,\n      _product_dna: product_dna,\n      _rule: rule,\n      _content: piece,\n      _script_format: script_format || 'video_script',\n      _target_platform: target_platform || 'multi',\n      _personality_dna_id: personality_dna_id,\n      _audience_dna_id: audience_dna_id,\n      _product_dna_id: product_dna_id\n    }\n  });\n}\n\nconsole.log(`Created ${tasks.length} generation tasks`);\nreturn tasks;"
+        "jsCode": "// Prepare generation context: fetch training context once, format DNA, split into tasks\nconst body = $('Webhook').item.json.body || $('Webhook').item.json;\nconst {\n  generation_run_id, personality_dna_id, audience_dna_id, product_dna_id,\n  count, script_format, target_platform,\n  personality_dna, audience_dna, product_dna,\n  rules, content, supabase_url, supabase_service_key\n} = body;\n\nif (!content || content.length === 0) {\n  return [{ json: { _no_content: true, _run_id: generation_run_id, _supabase_url: supabase_url, _supabase_key: supabase_service_key } }];\n}\n\n// Fetch training context once for the entire run\nlet trainingContext = '';\ntry {\n  const tcRes = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${supabase_url}/functions/v1/get-training-context`,\n    headers: {\n      'Authorization': `Bearer ${supabase_service_key}`,\n      'apikey': supabase_service_key,\n      'Content-Type': 'application/json'\n    },\n    body: { dna_expert_id: personality_dna_id, user_id: 'default-user' },\n    json: true\n  });\n  trainingContext = tcRes.training_context || '';\n  console.log('Training context loaded:', JSON.stringify(tcRes.stats));\n} catch(e) {\n  console.log('Training context fetch failed (continuing without):', e.message);\n}\n\n// Format DNA as plain strings for pipeline-model-ads\nconst pd = personality_dna?.data || {};\nconst ad_dna = audience_dna?.data || {};\nconst prod = product_dna?.data || {};\n\nconst dnaExpert = [\n  pd.about ? `Quién soy: ${pd.about}` : '',\n  pd.voice ? `Mi voz y estilo: ${pd.voice}` : '',\n  pd.credentials ? `Credenciales: ${pd.credentials}` : '',\n  pd.forbidden_words ? `Palabras PROHIBIDAS: ${pd.forbidden_words}` : ''\n].filter(Boolean).join('\\n');\n\nconst dnaAudience = [\n  ad_dna.ideal_client ? `Cliente ideal: ${ad_dna.ideal_client}` : '',\n  ad_dna.core_belief ? `Creencia central: ${ad_dna.core_belief}` : '',\n  ad_dna.testimonials ? `Prueba social: ${ad_dna.testimonials}` : '',\n  ad_dna.keywords ? `Palabras que usan: ${ad_dna.keywords}` : ''\n].filter(Boolean).join('\\n');\n\nconst dnaProduct = [\n  prod.main_problem ? `Problema que resuelvo: ${prod.main_problem}` : '',\n  prod.solution_promise ? `Promesa de solución: ${prod.solution_promise}` : '',\n  prod.irresistible_offer ? `Oferta: ${prod.irresistible_offer}` : '',\n  prod.keywords ? `Keywords: ${prod.keywords}` : ''\n].filter(Boolean).join('\\n');\n\nconst maxTasks = Math.min(content.length, count || 10);\nconst tasks = [];\n\nfor (let i = 0; i < maxTasks; i++) {\n  const piece = content[i];\n  const rule = rules?.find(r => r.referente_id === piece.referente_id) || rules?.[0] || null;\n  tasks.push({\n    json: {\n      _run_id: generation_run_id,\n      _supabase_url: supabase_url,\n      _supabase_key: supabase_service_key,\n      _personality_dna_id: personality_dna_id,\n      _audience_dna_id: audience_dna_id,\n      _product_dna_id: product_dna_id,\n      _rule: rule,\n      _content: piece,\n      _script_format: script_format || 'video_script',\n      _target_platform: target_platform || 'multi',\n      _dna_expert: dnaExpert,\n      _dna_audience: dnaAudience,\n      _dna_product: dnaProduct,\n      _training_context: trainingContext,\n      _no_content: false\n    }\n  });\n}\n\nconsole.log(`Created ${tasks.length} tasks with training context (${trainingContext.length} chars)`);\nreturn tasks;"
       },
       "id": "prepare-tasks",
       "name": "Prepare Tasks",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [640, 300],
+      "position": [
+        640,
+        300
+      ],
       "executeOnce": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "no-content-check",
               "leftValue": "={{ $json._no_content }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -57,7 +73,10 @@
       "name": "Has Content?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [860, 300]
+      "position": [
+        860,
+        300
+      ]
     },
     {
       "parameters": {
@@ -67,7 +86,10 @@
       "name": "Handle No Content",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, 160]
+      "position": [
+        1080,
+        160
+      ]
     },
     {
       "parameters": {
@@ -78,52 +100,23 @@
       "name": "Loop Tasks",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [1080, 440]
+      "position": [
+        1080,
+        440
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Build Claude Opus prompt from DNA + content + rule\nconst task = $input.first().json;\nconst pd = task._personality_dna?.data || {};\nconst ad = task._audience_dna?.data || {};\nconst prod = task._product_dna?.data || {};\nconst content = task._content || {};\nconst rule = task._rule || {};\nconst fmt = task._script_format || 'video_script';\nconst platform = task._target_platform || 'multi';\n\n// Format DNA data as readable text\nconst personalityText = [\n  pd.about ? `Quién soy: ${pd.about}` : '',\n  pd.voice ? `Mi voz y estilo: ${pd.voice}` : '',\n  pd.credentials ? `Credenciales: ${pd.credentials}` : '',\n  pd.forbidden_words ? `Palabras PROHIBIDAS: ${pd.forbidden_words}` : ''\n].filter(Boolean).join('\\n');\n\nconst audienceText = [\n  ad.ideal_client ? `Cliente ideal: ${ad.ideal_client}` : '',\n  ad.core_belief ? `Creencia central: ${ad.core_belief}` : '',\n  ad.testimonials ? `Prueba social: ${ad.testimonials}` : '',\n  ad.keywords ? `Palabras que usan: ${ad.keywords}` : ''\n].filter(Boolean).join('\\n');\n\nconst productText = [\n  prod.main_problem ? `Problema que resuelvo: ${prod.main_problem}` : '',\n  prod.solution_promise ? `Promesa de solución: ${prod.solution_promise}` : '',\n  prod.irresistible_offer ? `Oferta: ${prod.irresistible_offer}` : '',\n  prod.keywords ? `Keywords: ${prod.keywords}` : ''\n].filter(Boolean).join('\\n');\n\nconst contentText = [\n  content.original_caption ? `Caption/Texto original:\\n${content.original_caption.substring(0, 3000)}` : '',\n  content.transcript ? `Transcripción:\\n${content.transcript.substring(0, 2000)}` : '',\n  content.media_analysis ? `Análisis visual: ${content.media_analysis.substring(0, 500)}` : '',\n  content.strategic_analysis ? `Análisis estratégico: ${content.strategic_analysis.substring(0, 500)}` : '',\n  content.content_structure ? `Estructura detectada: ${content.content_structure.substring(0, 300)}` : '',\n  content.views ? `Vistas: ${content.views.toLocaleString()}` : '',\n  content.likes ? `Likes: ${content.likes.toLocaleString()}` : '',\n  content.days_active ? `Días activo: ${content.days_active}` : ''\n].filter(Boolean).join('\\n');\n\nconst userPrompt = `=== DNA DEL CLIENTE ===\nPersonalidad/Voz:\n${personalityText || 'Sin datos'}\n\nAudiencia/Avatar:\n${audienceText || 'Sin datos'}\n\nProducto/Oferta:\n${productText || 'Sin datos'}\n\n=== REFERENTE ===\nNombre: ${rule.referentes?.name || content.referente_id || 'Referente'}\nQué MODELAR de este referente: ${rule.what_to_model || 'Estructura y framework de persuasión'}\nQué FILTRAR de este referente: ${rule.what_to_filter || 'Elementos no aplicables al DNA'}\n\n=== CONTENIDO ORIGINAL A MODELAR ===\nPlataforma: ${content.platform}\nTipo: ${content.content_type}\n${contentText}\n\n=== FORMATO DE ENTREGA ===\nFormato: ${fmt}\nPlataforma destino: ${platform}\n\nResponde ÚNICAMENTE con este JSON válido (sin texto adicional, sin backticks):\n{\n  \"hook_1\": \"El hook principal. Para video_script: incluir [NOTAS DE PRODUCCIÓN] entre corchetes.\",\n  \"hook_2\": \"Un segundo hook con un ángulo DIFERENTE al hook 1.\",\n  \"body\": \"El cuerpo. Para video_script: incluir [NOTAS DE PRODUCCIÓN] entre corchetes.\",\n  \"cta\": \"Call to action con urgencia y acción clara.\",\n  \"production_notes\": \"Notas generales de producción. null si es written_ad.\",\n  \"what_was_modeled\": \"Qué se tomó del referente.\",\n  \"why_it_works\": \"Por qué el original funciona (1-2 oraciones).\",\n  \"how_adapted\": \"Cómo se adaptó al DNA.\"\n}`;\n\nreturn [{ json: { ...task, _user_prompt: userPrompt } }];"
-      },
-      "id": "build-prompt",
-      "name": "Build Prompt",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1300, 440]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-api-key", "value": "=PEGA_TU_ANTHROPIC_API_KEY_AQUI" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "Content-Type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"claude-opus-4-6\",\n  \"max_tokens\": 4000,\n  \"system\": \"Eres el mayor experto en modelado de anuncios publicitarios del mercado. Tu trabajo es tomar contenido ganador de referentes y MODELARLO a la voz, audiencia y producto de un perfil específico (DNA).\\n\\nREGLAS ABSOLUTAS:\\n1. PROTOCOLO DE VERACIDAD: NUNCA inventes datos, cifras, claims, testimonios o información que no esté en el contenido original o en el DNA. Si falta información, usa [DATO POR DEFINIR].\\n2. Mantén la ESTRUCTURA que hace ganador al original — el framework persuasivo, el orden de los elementos, el ritmo.\\n3. Cambia SOLO lo necesario para alinear con la voz del DNA.\\n4. El 80% del esfuerzo va en los HOOKS. Hook 1 y Hook 2 deben ser variaciones DISTINTAS.\\n5. Respeta las reglas de 'qué modelar' y 'qué filtrar' del referente.\\n6. Para video_script: incluye notas de producción entre corchetes [NOTA DE PRODUCCIÓN].\\n7. Para written_ad: solo copy, sin notas de producción.\\n8. El CTA siempre debe incluir urgencia y una acción clara.\\n9. Escribe en español latino (a menos que el DNA indique otro idioma).\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"{{ $json._user_prompt.replace(/\\\"/g, '\\\\\\\"').replace(/\\n/g, '\\\\n') }}\"\n  }]\n}",
-        "options": { "timeout": 120000 }
-      },
-      "id": "claude-opus-model",
-      "name": "Claude Opus (Model)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1520, 440],
-      "notes": "Replace PEGA_TU_ANTHROPIC_API_KEY_AQUI with your Anthropic API key.",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Parse Claude response and save to Supabase\nconst task = $('Build Prompt').item.json;\nlet parsed = null;\n\ntry {\n  const res = $input.first().json;\n  const text = res.content?.[0]?.text || '';\n  // Find JSON in the response\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    parsed = JSON.parse(match[0]);\n  }\n} catch(e) {\n  console.log('Parse error:', e.message);\n}\n\nif (!parsed || !parsed.hook_1 || !parsed.body || !parsed.cta) {\n  console.log('Invalid or empty response from Claude, skipping save');\n  return [{ json: { ...task, _saved: false, _error: 'invalid_response' } }];\n}\n\n// Save script to Supabase\nconst script = {\n  personality_dna_id: task._personality_dna_id,\n  audience_dna_id: task._audience_dna_id,\n  product_dna_id: task._product_dna_id,\n  source_content_id: task._content?.id || null,\n  referente_id: task._content?.referente_id || null,\n  referente_name: task._rule?.referentes?.name || null,\n  generation_run_id: task._run_id || null,\n  hook_1: parsed.hook_1,\n  hook_2: parsed.hook_2 || null,\n  body: parsed.body,\n  cta: parsed.cta,\n  production_notes: parsed.production_notes || null,\n  script_format: task._script_format,\n  target_platform: task._target_platform,\n  what_was_modeled: parsed.what_was_modeled || null,\n  why_it_works: parsed.why_it_works || null,\n  how_adapted: parsed.how_adapted || null,\n  status: 'draft',\n  model_used: 'claude-opus-4-6'\n};\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${task._supabase_url}/rest/v1/modeled_scripts`,\n    headers: {\n      'Authorization': `Bearer ${task._supabase_key}`,\n      'apikey': task._supabase_key,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=minimal'\n    },\n    body: script,\n    json: true\n  });\n  console.log(`Saved script for referente: ${script.referente_name}`);\n} catch(e) {\n  console.log('Save script error:', e.message);\n  return [{ json: { ...task, _saved: false, _error: e.message } }];\n}\n\n// Mark content as used\nif (task._content?.id) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'PATCH',\n      url: `${task._supabase_url}/rest/v1/referente_content?id=eq.${task._content.id}`,\n      headers: {\n        'Authorization': `Bearer ${task._supabase_key}`,\n        'apikey': task._supabase_key,\n        'Content-Type': 'application/json',\n        'Prefer': 'return=minimal'\n      },\n      body: { is_used: true },\n      json: true\n    });\n  } catch(e) {\n    console.log('Mark used error:', e.message);\n  }\n}\n\nreturn [{ json: { ...task, _saved: true } }];"
+        "jsCode": "// Parse pipeline-model-ads result and save to Supabase\nconst task = $('Call Pipeline').item.json;\nconst s = task._pipeline_result;\n\nif (!s || !s.hook_1 || !s.cuerpo) {\n  console.log('Invalid or empty pipeline response, skipping save');\n  return [{ json: { ...task, _saved: false, _error: 'invalid_pipeline_response' } }];\n}\n\nconst script = {\n  personality_dna_id: task._personality_dna_id,\n  audience_dna_id: task._audience_dna_id,\n  product_dna_id: task._product_dna_id,\n  source_content_id: task._content?.id || null,\n  referente_id: task._content?.referente_id || null,\n  referente_name: task._rule?.referentes?.name || s.referente || null,\n  generation_run_id: task._run_id || null,\n  hook_1: s.hook_1 || '',\n  hook_2: s.hook_2 || null,\n  body: s.cuerpo || '',\n  cta: s.cta_1 || '',\n  production_notes: s.cta_2 ? `CTA alternativo: ${s.cta_2}` : null,\n  script_format: task._script_format,\n  target_platform: s.platform || task._target_platform,\n  what_was_modeled: s.referente || null,\n  why_it_works: s.needs_review\n    ? `Requiere revisión (score: ${s.quality_score}/100)`\n    : `Score: ${s.quality_score}/100`,\n  how_adapted: s.pending_items?.length\n    ? `Pendientes: ${s.pending_items.join(', ')}`\n    : null,\n  status: 'draft',\n  model_used: 'claude-opus-4-6'\n};\n\ntry {\n  await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${task._supabase_url}/rest/v1/modeled_scripts`,\n    headers: {\n      'Authorization': `Bearer ${task._supabase_key}`,\n      'apikey': task._supabase_key,\n      'Content-Type': 'application/json',\n      'Prefer': 'return=minimal'\n    },\n    body: script,\n    json: true\n  });\n  console.log(`Saved script for: ${script.referente_name} (score: ${s.quality_score})`);\n} catch(e) {\n  console.log('Save script error:', e.message);\n  return [{ json: { ...task, _saved: false, _error: e.message } }];\n}\n\n// Mark content as used\nif (task._content?.id) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'PATCH',\n      url: `${task._supabase_url}/rest/v1/referente_content?id=eq.${task._content.id}`,\n      headers: {\n        'Authorization': `Bearer ${task._supabase_key}`,\n        'apikey': task._supabase_key,\n        'Content-Type': 'application/json',\n        'Prefer': 'return=minimal'\n      },\n      body: { is_used: true },\n      json: true\n    });\n  } catch(e) { /* ignore */ }\n}\n\nreturn [{ json: { ...task, _saved: true } }];"
       },
       "id": "parse-save",
       "name": "Parse & Save",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1740, 440]
+      "position": [
+        1740,
+        440
+      ]
     },
     {
       "parameters": {
@@ -133,40 +126,118 @@
       "name": "Complete Run",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1960, 300],
+      "position": [
+        1960,
+        300
+      ],
       "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Call pipeline-model-ads for this single content piece\nconst task = $input.first().json;\nconst piece = task._content || {};\nconst rule = task._rule || {};\n\n// Map referente_content fields to the Ad format expected by pipeline-model-ads\nconst adItem = {\n  source: piece.platform || 'facebook_ads',\n  link: piece.post_url || '',\n  author: rule?.referentes?.name || 'Referente',\n  text: (piece.original_caption || piece.transcript || '').substring(0, 3000),\n  headline: piece.original_caption ? piece.original_caption.substring(0, 200) : '',\n  cta: '',\n  days_running: piece.days_active || null,\n  views: piece.views || null,\n  is_referent: true\n};\n\nconsole.log(`pipeline-model-ads: ${adItem.author} (${adItem.source}), text length: ${adItem.text.length}`);\n\nlet pipelineResult = null;\ntry {\n  const res = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${task._supabase_url}/functions/v1/pipeline-model-ads`,\n    headers: {\n      'Authorization': `Bearer ${task._supabase_key}`,\n      'apikey': task._supabase_key,\n      'Content-Type': 'application/json'\n    },\n    body: {\n      ads: [adItem],\n      dna_expert: task._dna_expert,\n      dna_audience: task._dna_audience,\n      dna_product: task._dna_product,\n      training_context: task._training_context || '',\n      max_retries: 2,\n      min_quality_score: 70\n    },\n    json: true,\n    timeout: 180000\n  });\n  pipelineResult = res.scripts?.[0] || null;\n  console.log(`Pipeline done: quality=${pipelineResult?.quality_score}, needs_review=${pipelineResult?.needs_review}`);\n} catch(e) {\n  console.log('Pipeline call failed:', e.message);\n}\n\nreturn [{ json: { ...task, _pipeline_result: pipelineResult } }];"
+      },
+      "id": "call-pipeline",
+      "name": "Call Pipeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        440
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Respond OK": {
-      "main": [[{ "node": "Prepare Tasks", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Prepare Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Tasks": {
-      "main": [[{ "node": "Has Content?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Has Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Has Content?": {
       "main": [
-        [{ "node": "Handle No Content", "type": "main", "index": 0 }],
-        [{ "node": "Loop Tasks", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Handle No Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Loop Tasks": {
       "main": [
-        [{ "node": "Complete Run", "type": "main", "index": 0 }],
-        [{ "node": "Build Prompt", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Complete Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Build Prompt": {
-      "main": [[{ "node": "Claude Opus (Model)", "type": "main", "index": 0 }]]
-    },
-    "Claude Opus (Model)": {
-      "main": [[{ "node": "Parse & Save", "type": "main", "index": 0 }]]
+    "Call Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Parse & Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse & Save": {
-      "main": [[{ "node": "Loop Tasks", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Loop Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -177,6 +248,10 @@
     "errorWorkflow": ""
   },
   "staticData": null,
-  "tags": [{ "name": "HOOQ" }],
+  "tags": [
+    {
+      "name": "HOOQ"
+    }
+  ],
   "triggerCount": 1
 }

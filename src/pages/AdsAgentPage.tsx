@@ -15,6 +15,7 @@ import { useDNAs } from '@/hooks/useDNAs';
 import { useGenerationRuns } from '@/hooks/useGenerationRuns';
 import { useModeledScripts } from '@/hooks/useModeledScripts';
 import { useScheduledGenerations } from '@/hooks/useScheduledGenerations';
+import { useTrainingPatterns } from '@/hooks/useTrainingPatterns';
 import { cn } from '@/lib/utils';
 import type {
   Ad, AdSearch, AdSearchType, AdMediaFilter,
@@ -206,6 +207,7 @@ function MotorModeladoTab() {
   const { runs } = useGenerationRuns(personalityId || undefined);
   const { scripts, isLoading: isLoadingScripts, updateStatus } = useModeledScripts({ runId: selectedRunId ?? undefined });
   const { schedules, createSchedule, isCreating: isCreatingSchedule, toggleSchedule, deleteSchedule } = useScheduledGenerations();
+  const { condensePatterns, isCondensing } = useTrainingPatterns();
 
   const canGenerate = personalityId && audienceId && productId;
 
@@ -464,6 +466,16 @@ function MotorModeladoTab() {
                 <h2 className="font-semibold text-lg text-foreground">{scripts.length} guiones modelados</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Haz clic en un guión para expandirlo, copiar o evaluar.</p>
               </div>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => condensePatterns({ dna_expert_id: personalityId || undefined })}
+                disabled={isCondensing}
+                className="gap-1.5 text-xs"
+                title="Extrae patrones de aprendizaje de tus correcciones anteriores"
+              >
+                {isCondensing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                Condensar patrones
+              </Button>
             </div>
             {scripts.map((script, i) => (
               <ScriptCard
