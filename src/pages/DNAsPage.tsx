@@ -323,6 +323,8 @@ export default function DNAsPage() {
   const audienceDnas = dnas?.filter(d => d.type === 'audience') ?? [];
   const productDnas = dnas?.filter(d => d.type === 'product') ?? [];
   const dnaBySectionType: Record<DNAType, any[]> = { expert: expertDnas, audience: audienceDnas, product: productDnas };
+  const hasAnyDna = (dnas?.length ?? 0) > 0;
+  const hasAllThreeDnaTypes = expertDnas.length > 0 && audienceDnas.length > 0 && productDnas.length > 0;
 
   const completedCount = selectedDna
     ? Object.values(fieldStatus).filter(s => s === 'validated' || s === 'ai_suggested').length
@@ -556,6 +558,24 @@ export default function DNAsPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Siguiente paso */}
+          {!selectedDna && (
+            hasAllThreeDnaTypes ? (
+              <div className="mt-8 p-4 rounded-xl border border-violet-200 bg-violet-50/50">
+                <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1">Siguiente paso</p>
+                <p className="text-sm text-foreground">Tienes DNAs listos. Agrega referentes para empezar a buscar contenido viral.</p>
+                <button onClick={() => navigate('/referentes')} className="mt-2 text-xs text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1">
+                  Ir a Referentes <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="mt-8 p-4 rounded-xl border border-muted bg-muted/30">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Siguiente paso</p>
+                <p className="text-sm text-foreground">Empieza creando tu primer DNA de Personalidad.</p>
+              </div>
+            )
           )}
         </main>
       </div>

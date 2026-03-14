@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { NavLink } from 'react-router-dom';
 import {
   Home, Loader2, ChevronDown, Search, Clock, CheckCircle2,
   AlertCircle, Globe, Bot, ExternalLink, XCircle, Sparkles,
@@ -486,6 +487,15 @@ function MotorModeladoTab() {
                 onReject={() => updateStatus({ id: script.id, status: 'rejected' })}
               />
             ))}
+            {scripts.length > 0 && (
+              <div className="mt-4 p-4 rounded-xl border border-violet-200 bg-violet-50/50">
+                <p className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1">Siguiente paso</p>
+                <p className="text-sm text-foreground">Revisa y aprueba tus guiones en la sección de Resultados.</p>
+                <NavLink to="/scripts" className="mt-2 text-xs text-violet-600 hover:text-violet-800 font-medium flex items-center gap-1">
+                  Ir a Guiones <ChevronRight className="w-3 h-3" />
+                </NavLink>
+              </div>
+            )}
           </div>
         )}
       </main>
