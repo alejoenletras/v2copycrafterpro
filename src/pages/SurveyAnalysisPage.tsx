@@ -185,11 +185,21 @@ export default function SurveyAnalysisPage() {
     setLoading(true);
     setAnalysis(null);
     try {
+      // Limitar payload: máximo 200 respuestas por columna para no saturar la función
+      const trimmedColumns = columns.map(col => ({
+        name: col.name,
+        values: col.values.slice(0, 200),
+      }));
+
       const { data, error } = await supabase.functions.invoke('analyze-survey', {
-        body: { columns, context: context.trim() || undefined },
+        body: { columns: trimmedColumns, context: context.trim() || undefined },
       });
+
       if (error) throw new Error(error.message);
+      if (!data) throw new Error('La función no devolvió datos. Verifica que analyze-survey esté desplegada.');
       if (data.error) throw new Error(data.error);
+      if (!data.analysis) throw new Error(`Respuesta inesperada: ${JSON.stringify(data).slice(0, 200)}`);
+
       setAnalysis(data.analysis);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
