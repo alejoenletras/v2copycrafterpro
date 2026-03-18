@@ -1,5 +1,5 @@
 {
-  "name": "Hooq Ads Agent v8 — 4 Plataformas",
+  "name": "Hooq Ads Agent v9 — 3 Plataformas",
   "nodes": [
     {
       "id": "aa111111-0000-0000-0000-000000000001",
@@ -34,27 +34,17 @@
       "typeVersion": 2,
       "position": [440, 400],
       "parameters": {
-        "jsCode": "// ─── HOOQ Ads Agent — Config ─────────────────────────────────────────────────\n// Lee el payload del webhook y prepara las variables para los 4 scrapers.\n// NOTA: el token de Apify se lee desde process.env.APIFY_TOKEN\n// Configurar en Railway → Variables: APIFY_TOKEN=tu_token\n\nconst body = $('Webhook').item.json.body || $('Webhook').item.json;\n\nconst keyword   = body.keyword || '';\nconst encodedKw = encodeURIComponent(keyword);\n\nconst fbAdsUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encodedKw}&search_type=keyword_unordered&media_type=video`;\nconst igAdsUrl = fbAdsUrl + '&publisher_platforms[0]=instagram';\n\nreturn [{\n  json: {\n    keyword,\n    countries:        body.countries || ['ALL'],\n    maxAds:           body.max_ads || 30,\n    minViews:         body.filters?.min_views || 100000,\n    minDuration:      body.filters?.min_duration_seconds || 15,\n    maxAgeDays:       body.filters?.max_age_days || 90,\n    minDaysActive:    body.filters?.min_days_active || 7,\n    platforms:        body.filters?.platforms || ['facebook', 'instagram', 'tiktok', 'ig_organic'],\n    dna_expert:       body.dna_expert || '',\n    dna_audience:     body.dna_audience || '',\n    dna_product:      body.dna_product || '',\n    telegram_chat_id: body.telegram_chat_id || '',\n    email:            body.email || '',\n    fbAdsUrl,\n    igAdsUrl,\n  }\n}];"
+        "jsCode": "const body = $('Webhook').item.json.body || $('Webhook').item.json;\n\nconst keyword              = body.query || body.keyword || '';\nconst search_id            = body.search_id || null;\nconst supabase_url         = body.supabase_url || '';\nconst supabase_service_key = body.supabase_service_key || '';\nconst apify_token          = body.apify_token || '';\nconst encodedKw            = encodeURIComponent(keyword);\n\n// Una sola URL para Meta Ads Library — devuelve FB + IG juntos\nconst fbAdsUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encodedKw}&search_type=keyword_unordered`;\n\nconsole.log('Config — keyword:', keyword, '| search_id:', search_id);\n\nreturn [{\n  json: {\n    keyword,\n    search_id,\n    supabase_url,\n    supabase_service_key,\n    apify_token,\n    maxAds:        Math.min(body.max_ads || 50, 50),\n    minViews:      body.filters?.min_views || 10000,\n    minDuration:   body.filters?.min_duration_seconds || 5,\n    maxAgeDays:    body.filters?.max_age_days || 180,\n    minDaysActive: body.filters?.min_days_active || 3,\n    dna_expert:       body.dna_expert || '',\n    dna_audience:     body.dna_audience || '',\n    dna_product:      body.dna_product || '',\n    telegram_chat_id: body.telegram_chat_id || '',\n    email:            body.email || '',\n    fbAdsUrl,\n  }\n}];"
       }
     },
     {
       "id": "dd444444-0000-0000-0000-000000000004",
-      "name": "Buscar FB Ads",
+      "name": "Buscar Meta Ads",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 100],
+      "position": [700, 200],
       "parameters": {
-        "jsCode": "// ─── Scraper: Facebook Ads Library ──────────────────────────────────────────\nconst config = $('Config').item.json;\nconst apifyToken = process.env.APIFY_TOKEN || '';\n\nif (!apifyToken) {\n  return [{ json: { _platform: 'facebook', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/apify~facebook-ads-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,\n    body: {\n      startUrls: [{ url: config.fbAdsUrl }],\n      maxItems: config.maxAds || 30,\n      country: 'ALL',\n      activeStatus: 'active',\n      sortOrder: 'relevancy_monthly_grouped'\n    },\n    json: true,\n    timeout: 180000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`FB Ads: ${items.length} obtenidos`);\n} catch(e) {\n  console.log('FB Ads error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(ad => ({ json: ad })) : [{ json: { _platform: 'facebook', _empty: true } }];"
-      }
-    },
-    {
-      "id": "ee555555-0000-0000-0000-000000000005",
-      "name": "Buscar IG Ads",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [700, 300],
-      "parameters": {
-        "jsCode": "// ─── Scraper: Instagram Ads Library (paid) ───────────────────────────────────\nconst config = $('Config').item.json;\nconst apifyToken = process.env.APIFY_TOKEN || '';\n\nif (!apifyToken) {\n  return [{ json: { _platform: 'instagram_ads', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/apify~facebook-ads-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,\n    body: {\n      startUrls: [{ url: config.igAdsUrl }],\n      maxItems: config.maxAds || 30,\n      country: 'ALL',\n      activeStatus: 'active',\n      sortOrder: 'relevancy_monthly_grouped'\n    },\n    json: true,\n    timeout: 180000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`IG Ads: ${items.length} obtenidos`);\n} catch(e) {\n  console.log('IG Ads error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(ad => ({ json: ad })) : [{ json: { _platform: 'instagram_ads', _empty: true } }];"
+        "jsCode": "// ─── Scraper: Meta Ads Library (FB + IG en una sola sesión) ──────────────────\nconst config = $('Config').item.json;\nconst apifyToken = config.apify_token || '';\n\nif (!apifyToken) {\n  console.log('apify_token vacío');\n  return [{ json: { _platform: 'facebook', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\nconst maxItems = config.maxAds || 50;\nconsole.log('Meta Ads — keyword:', config.keyword, '| maxItems:', maxItems);\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/apify~facebook-ads-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=60`,\n    body: {\n      startUrls: [{ url: config.fbAdsUrl }],\n      maxItems,\n      country: 'ALL',\n      activeStatus: 'active',\n      sortOrder: 'relevancy_monthly_grouped'\n    },\n    json: true,\n    timeout: 90000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`Meta Ads: ${items.length} obtenidos. Keys:`, items[0] ? Object.keys(items[0]).slice(0,8).join(',') : 'ninguno');\n} catch(e) {\n  console.log('Meta Ads error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(ad => ({ json: ad })) : [{ json: { _platform: 'facebook', _empty: true } }];"
       }
     },
     {
@@ -64,7 +54,7 @@
       "typeVersion": 2,
       "position": [700, 500],
       "parameters": {
-        "jsCode": "// ─── Scraper: TikTok orgánico ────────────────────────────────────────────────\nconst config = $('Config').item.json;\nconst apifyToken = process.env.APIFY_TOKEN || '';\n\nif (!apifyToken) {\n  return [{ json: { _platform: 'tiktok', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/clockworks~free-tiktok-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,\n    body: {\n      hashtags: [config.keyword],\n      resultsPerPage: config.maxAds || 30,\n      maxItems: config.maxAds || 30\n    },\n    json: true,\n    timeout: 180000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`TikTok: ${items.length} obtenidos`);\n} catch(e) {\n  console.log('TikTok error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(v => ({ json: v })) : [{ json: { _platform: 'tiktok', _empty: true } }];"
+        "jsCode": "// ─── Scraper: TikTok orgánico por hashtag ────────────────────────────────────\nconst config = $('Config').item.json;\nconst apifyToken = config.apify_token || '';\n\nif (!apifyToken) {\n  return [{ json: { _platform: 'tiktok', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\nconst maxItems = config.maxAds || 50;\nconsole.log('TikTok — keyword:', config.keyword, '| maxItems:', maxItems);\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/clockworks~free-tiktok-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=60`,\n    body: {\n      hashtags: [config.keyword],\n      resultsPerPage: maxItems,\n      maxItems\n    },\n    json: true,\n    timeout: 90000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`TikTok: ${items.length} obtenidos`);\n} catch(e) {\n  console.log('TikTok error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(v => ({ json: v })) : [{ json: { _platform: 'tiktok', _empty: true } }];"
       }
     },
     {
@@ -74,27 +64,17 @@
       "typeVersion": 2,
       "position": [700, 700],
       "parameters": {
-        "jsCode": "// ─── Scraper: Instagram orgánico por hashtag ─────────────────────────────────\n// Actor: apify/instagram-hashtag-scraper\n// Scrapeamos posts por hashtag de la keyword — mismas reglas que TikTok:\n// views >= 100K, duración >= 15s, antigüedad <= 90 días\n\nconst config = $('Config').item.json;\nconst apifyToken = process.env.APIFY_TOKEN || '';\n\nif (!apifyToken) {\n  return [{ json: { _platform: 'ig_organic', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\n// Limpiar keyword para usarla como hashtag (sin espacios, sin #)\nconst hashtag = config.keyword.replace(/\\s+/g, '').replace(/^#/, '');\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/apify~instagram-hashtag-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,\n    body: {\n      hashtags: [hashtag],\n      resultsLimit: config.maxAds || 30\n    },\n    json: true,\n    timeout: 180000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`IG Orgánico: ${items.length} posts obtenidos para #${hashtag}`);\n} catch(e) {\n  console.log('IG Orgánico error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(p => ({ json: p })) : [{ json: { _platform: 'ig_organic', _empty: true } }];"
+        "jsCode": "// ─── Scraper: Instagram orgánico por hashtag ─────────────────────────────────\nconst config = $('Config').item.json;\nconst apifyToken = config.apify_token || '';\n\nif (!apifyToken) {\n  return [{ json: { _platform: 'ig_organic', _error: 'APIFY_TOKEN no configurado' } }];\n}\n\nconst hashtag  = config.keyword.replace(/\\s+/g, '').replace(/^#/, '');\nconst maxItems = config.maxAds || 50;\nconsole.log('IG Orgánico — hashtag:', hashtag, '| maxItems:', maxItems);\n\nlet items = [];\ntry {\n  const results = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://api.apify.com/v2/acts/apify~instagram-hashtag-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=60`,\n    body: { hashtags: [hashtag], resultsLimit: maxItems },\n    json: true,\n    timeout: 90000\n  });\n  items = Array.isArray(results) ? results : [];\n  console.log(`IG Orgánico: ${items.length} posts para #${hashtag}`);\n} catch(e) {\n  console.log('IG Orgánico error:', e.message);\n}\n\nreturn items.length > 0 ? items.map(p => ({ json: p })) : [{ json: { _platform: 'ig_organic', _empty: true } }];"
       }
     },
     {
       "id": "gg777777-0000-0000-0000-000000000007",
-      "name": "Filtrar FB Ads",
+      "name": "Filtrar Meta Ads",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 100],
+      "position": [1000, 200],
       "parameters": {
-        "jsCode": "// ─── Filtro: Facebook Ads — proxy = días activo ───────────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst minDaysActive = config.minDaysActive || 7;\nconst maxAgeDays    = config.maxAgeDays || 90;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const ad = item.json;\n  const startDate = ad.startDate || ad.ad_delivery_start_time || ad.start_date || ad.adDeliveryStartTime;\n  let daysActive = 0;\n  if (startDate) {\n    daysActive = Math.floor((Date.now() - new Date(startDate).getTime()) / 86400000);\n  }\n  if (daysActive >= minDaysActive && daysActive <= maxAgeDays) {\n    const quality = daysActive >= 30 ? 'high' : daysActive >= 14 ? 'medium' : 'low';\n    filtered.push({ json: { ...ad, _daysActive: daysActive, _platform: 'facebook', _qualitySignal: quality, _adText: ad.adText || ad.ad_creative_bodies?.[0] || ad.body || '', _adLink: ad.adUrl || ad.ad_snapshot_url || '' } });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._daysActive || 0) - (a.json._daysActive || 0));\nconst top = filtered.slice(0, 15);\nconsole.log(`FB Ads filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'facebook', _empty: true, _filtered: true } }];"
-      }
-    },
-    {
-      "id": "hh888888-0000-0000-0000-000000000008",
-      "name": "Filtrar IG Ads",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1000, 300],
-      "parameters": {
-        "jsCode": "// ─── Filtro: Instagram Ads — proxy = días activo ─────────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst minDaysActive = config.minDaysActive || 7;\nconst maxAgeDays    = config.maxAgeDays || 90;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const ad = item.json;\n  const startDate = ad.startDate || ad.ad_delivery_start_time || ad.start_date || ad.adDeliveryStartTime;\n  let daysActive = 0;\n  if (startDate) {\n    daysActive = Math.floor((Date.now() - new Date(startDate).getTime()) / 86400000);\n  }\n  if (daysActive >= minDaysActive && daysActive <= maxAgeDays) {\n    const quality = daysActive >= 30 ? 'high' : daysActive >= 14 ? 'medium' : 'low';\n    filtered.push({ json: { ...ad, _daysActive: daysActive, _platform: 'instagram_ads', _qualitySignal: quality, _adText: ad.adText || ad.ad_creative_bodies?.[0] || ad.body || '', _adLink: ad.adUrl || ad.ad_snapshot_url || '' } });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._daysActive || 0) - (a.json._daysActive || 0));\nconst top = filtered.slice(0, 15);\nconsole.log(`IG Ads filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'instagram_ads', _empty: true, _filtered: true } }];"
+        "jsCode": "// ─── Filtro: Meta Ads (FB + IG) — proxy = días activo ────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst minDaysActive = config.minDaysActive || 3;\nconst maxAgeDays    = config.maxAgeDays || 180;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const ad = item.json;\n  const startDate = ad.startDate || ad.ad_delivery_start_time || ad.start_date || ad.adDeliveryStartTime;\n  let daysActive = 0;\n  if (startDate) {\n    daysActive = Math.floor((Date.now() - new Date(startDate).getTime()) / 86400000);\n  }\n  if (daysActive >= minDaysActive && daysActive <= maxAgeDays) {\n    const quality = daysActive >= 30 ? 'high' : daysActive >= 14 ? 'medium' : 'low';\n    // Detectar si es IG o FB por publisherPlatforms\n    const platforms = ad.publisherPlatforms || ad.publisher_platforms || [];\n    const isIG = Array.isArray(platforms) ? platforms.includes('instagram') : String(platforms).includes('instagram');\n    const platform = isIG ? 'instagram_ads' : 'facebook';\n    filtered.push({\n      json: {\n        ...ad,\n        _daysActive: daysActive,\n        _platform: platform,\n        _qualitySignal: quality,\n        _adText: ad.adText || ad.ad_creative_bodies?.[0] || ad.body || ad.snapshot?.body?.markup?.__html || '',\n        _adLink: ad.adUrl || ad.ad_snapshot_url || `https://www.facebook.com/ads/library/?id=${ad.adArchiveID || ad.id}`\n      }\n    });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._daysActive || 0) - (a.json._daysActive || 0));\nconst top = filtered.slice(0, 25);\nconsole.log(`Meta Ads filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'facebook', _empty: true, _filtered: true } }];"
       }
     },
     {
@@ -104,7 +84,7 @@
       "typeVersion": 2,
       "position": [1000, 500],
       "parameters": {
-        "jsCode": "// ─── Filtro: TikTok — views + duración + antigüedad ──────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst MIN_VIEWS    = config.minViews    || 100000;\nconst MIN_DURATION = config.minDuration || 15;\nconst MAX_AGE_DAYS = config.maxAgeDays  || 90;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const v = item.json;\n  const views    = v.playCount || v.plays || v.viewCount || v.stats?.playCount || 0;\n  const duration = v.duration  || v.videoLength || v.videoDuration || v.video?.duration || 0;\n  const ct = v.createTime || v.createdAt || v.publishedAt;\n  let ageInDays = 0;\n  if (ct) {\n    const created = new Date(typeof ct === 'number' ? ct * 1000 : ct);\n    ageInDays = Math.floor((Date.now() - created.getTime()) / 86400000);\n  }\n  if (views >= MIN_VIEWS && duration >= MIN_DURATION && ageInDays <= MAX_AGE_DAYS && ageInDays > 0) {\n    const quality = views >= 1000000 ? 'high' : views >= 500000 ? 'medium' : 'low';\n    filtered.push({ json: { ...v, _views: views, _duration: duration, _ageInDays: ageInDays, _platform: 'tiktok', _qualitySignal: quality, _adText: v.text || v.desc || v.description || '', _adLink: v.webVideoUrl || v.shareUrl || '' } });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._views || 0) - (a.json._views || 0));\nconst top = filtered.slice(0, 15);\nconsole.log(`TikTok filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'tiktok', _empty: true, _filtered: true } }];"
+        "jsCode": "// ─── Filtro: TikTok — views + duración + antigüedad ──────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst MIN_VIEWS    = config.minViews    || 10000;\nconst MIN_DURATION = config.minDuration || 5;\nconst MAX_AGE_DAYS = config.maxAgeDays  || 180;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const v = item.json;\n  const views    = v.playCount || v.plays || v.viewCount || v.stats?.playCount || 0;\n  const duration = v.duration  || v.videoLength || v.videoDuration || v.video?.duration || 0;\n  const ct = v.createTime || v.createdAt || v.publishedAt;\n  let ageInDays = 0;\n  if (ct) {\n    const created = new Date(typeof ct === 'number' ? ct * 1000 : ct);\n    ageInDays = Math.floor((Date.now() - created.getTime()) / 86400000);\n  }\n  if (views >= MIN_VIEWS && duration >= MIN_DURATION && ageInDays <= MAX_AGE_DAYS && ageInDays > 0) {\n    const quality = views >= 1000000 ? 'high' : views >= 100000 ? 'medium' : 'low';\n    filtered.push({ json: { ...v, _views: views, _duration: duration, _ageInDays: ageInDays, _platform: 'tiktok', _qualitySignal: quality, _adText: v.text || v.desc || v.description || '', _adLink: v.webVideoUrl || v.shareUrl || '' } });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._views || 0) - (a.json._views || 0));\nconst top = filtered.slice(0, 25);\nconsole.log(`TikTok filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'tiktok', _empty: true, _filtered: true } }];"
       }
     },
     {
@@ -114,23 +94,15 @@
       "typeVersion": 2,
       "position": [1000, 700],
       "parameters": {
-        "jsCode": "// ─── Filtro: Instagram orgánico — mismas reglas que TikTok ───────────────────\n// views >= 100K, duración >= 15s (solo videos), antigüedad <= 90 días\n\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst MIN_VIEWS    = config.minViews    || 100000;\nconst MIN_DURATION = config.minDuration || 15;\nconst MAX_AGE_DAYS = config.maxAgeDays  || 90;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const p = item.json;\n\n  // Métricas de IG orgánico (campos varían según actor de Apify)\n  const views    = p.videoViewCount || p.videoPlayCount || p.playCount || p.likesCount || 0;\n  const duration = p.videoDuration  || p.video?.duration || p.duration || 0;\n  const isVideo  = p.type === 'Video' || p.isVideo || !!p.videoUrl || duration > 0;\n\n  const timestamp = p.timestamp || p.takenAt || p.taken_at || p.createdAt;\n  let ageInDays = 0;\n  if (timestamp) {\n    const created = new Date(typeof timestamp === 'number' ? timestamp * 1000 : timestamp);\n    ageInDays = Math.floor((Date.now() - created.getTime()) / 86400000);\n  }\n\n  // Solo videos: exigir duración >= 15s y views >= 100K\n  // Imágenes/carousels: exigir likes >= 5K (proxy de alcance)\n  const likes = p.likesCount || p.likeCount || 0;\n  const passesFilter = isVideo\n    ? (views >= MIN_VIEWS && duration >= MIN_DURATION)\n    : (likes >= 5000);\n\n  if (passesFilter && ageInDays <= MAX_AGE_DAYS && ageInDays > 0) {\n    const quality = isVideo\n      ? (views >= 1000000 ? 'high' : views >= 500000 ? 'medium' : 'low')\n      : (likes >= 50000 ? 'high' : likes >= 10000 ? 'medium' : 'low');\n\n    filtered.push({\n      json: {\n        ...p,\n        _views:         views,\n        _duration:      duration,\n        _ageInDays:     ageInDays,\n        _isVideo:       isVideo,\n        _platform:      'ig_organic',\n        _qualitySignal: quality,\n        _adText:        p.caption || p.text || p.description || '',\n        _adLink:        p.url || p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : '',\n      }\n    });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._views || 0) - (a.json._views || 0));\nconst top = filtered.slice(0, 15);\nconsole.log(`IG Orgánico filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'ig_organic', _empty: true, _filtered: true } }];"
+        "jsCode": "// ─── Filtro: Instagram orgánico ──────────────────────────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\nconst MIN_VIEWS    = config.minViews    || 10000;\nconst MIN_DURATION = config.minDuration || 5;\nconst MAX_AGE_DAYS = config.maxAgeDays  || 180;\nconst filtered = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error) continue;\n  const p = item.json;\n  const views    = p.videoViewCount || p.videoPlayCount || p.playCount || p.likesCount || 0;\n  const duration = p.videoDuration  || p.video?.duration || p.duration || 0;\n  const isVideo  = p.type === 'Video' || p.isVideo || !!p.videoUrl || duration > 0;\n  const timestamp = p.timestamp || p.takenAt || p.taken_at || p.createdAt;\n  let ageInDays = 0;\n  if (timestamp) {\n    const created = new Date(typeof timestamp === 'number' ? timestamp * 1000 : timestamp);\n    ageInDays = Math.floor((Date.now() - created.getTime()) / 86400000);\n  }\n  const likes = p.likesCount || p.likeCount || 0;\n  const passesFilter = isVideo ? (views >= MIN_VIEWS && duration >= MIN_DURATION) : (likes >= 5000);\n  if (passesFilter && ageInDays <= MAX_AGE_DAYS && ageInDays > 0) {\n    const quality = isVideo\n      ? (views >= 1000000 ? 'high' : views >= 100000 ? 'medium' : 'low')\n      : (likes >= 50000 ? 'high' : likes >= 10000 ? 'medium' : 'low');\n    filtered.push({\n      json: {\n        ...p,\n        _views: views, _duration: duration, _ageInDays: ageInDays, _isVideo: isVideo,\n        _platform: 'ig_organic', _qualitySignal: quality,\n        _adText: p.caption || p.text || p.description || '',\n        _adLink: p.url || (p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : ''),\n      }\n    });\n  }\n}\n\nfiltered.sort((a, b) => (b.json._views || 0) - (a.json._views || 0));\nconst top = filtered.slice(0, 25);\nconsole.log(`IG Orgánico filtrados: ${top.length}/${items.length}`);\nreturn top.length > 0 ? top : [{ json: { _platform: 'ig_organic', _empty: true, _filtered: true } }];"
       }
     },
     {
-      "id": "jj101010-0000-0000-0000-00000000000a",
-      "name": "Merge FB+IG Ads",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [1280, 200],
-      "parameters": { "mode": "append" }
-    },
-    {
       "id": "kk111111-0000-0000-0000-00000000000b",
-      "name": "Merge con TikTok",
+      "name": "Merge Meta+TikTok",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1480, 350],
+      "position": [1280, 350],
       "parameters": { "mode": "append" }
     },
     {
@@ -138,7 +110,7 @@
       "name": "Merge con IG Orgánico",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1680, 500],
+      "position": [1520, 500],
       "parameters": { "mode": "append" }
     },
     {
@@ -146,56 +118,53 @@
       "name": "Preparar Resumen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1900, 500],
+      "position": [1760, 500],
       "parameters": {
-        "jsCode": "// ─── Preparar Resumen — 4 plataformas ────────────────────────────────────────\nconst items = $input.all();\nconst config = $('Config').item.json;\n\nconst summary = {\n  facebook:     { total: 0, high: 0, medium: 0, low: 0 },\n  instagram_ads:{ total: 0, high: 0, medium: 0, low: 0 },\n  tiktok:       { total: 0, high: 0, medium: 0, low: 0 },\n  ig_organic:   { total: 0, high: 0, medium: 0, low: 0 },\n};\n\nconst validContents = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error || item.json._filtered) continue;\n  const platform = item.json._platform || 'unknown';\n  const quality  = item.json._qualitySignal || 'low';\n  if (summary[platform]) {\n    summary[platform].total++;\n    if (summary[platform][quality] !== undefined) summary[platform][quality]++;\n  }\n  validContents.push({\n    platform,\n    quality,\n    text:       item.json._adText || '',\n    link:       item.json._adLink || '',\n    daysActive: item.json._daysActive || 0,\n    views:      item.json._views || 0,\n    raw:        item.json,\n  });\n}\n\nconst total = validContents.length;\n\nconst summaryText =\n  `📊 *Contenidos encontrados para \"${config.keyword}\"*\\n\\n` +\n  `• FB Ads: ${summary.facebook.total} (${summary.facebook.high} alta calidad)\\n` +\n  `• IG Ads: ${summary.instagram_ads.total} (${summary.instagram_ads.high} alta calidad)\\n` +\n  `• TikTok: ${summary.tiktok.total} (${summary.tiktok.high} alta calidad)\\n` +\n  `• IG Orgánico: ${summary.ig_organic.total} (${summary.ig_organic.high} alta calidad)\\n\\n` +\n  `✅ *Total seleccionados para modelar: ${total}*\\n` +\n  `_Iniciando pipeline de modelado con tu DNA..._`;\n\nconsole.log(`Resumen: ${total} contenidos válidos de 4 plataformas`);\n\nreturn [{\n  json: {\n    contents:         validContents,\n    summary,\n    summaryText,\n    totalContents:    total,\n    keyword:          config.keyword,\n    dna_expert:       config.dna_expert,\n    dna_audience:     config.dna_audience,\n    dna_product:      config.dna_product,\n    telegram_chat_id: config.telegram_chat_id,\n    email:            config.email,\n  }\n}];"
+        "jsCode": "const items = $input.all();\nconst config = $('Config').item.json;\n\nconst summary = {\n  facebook:      { total: 0, high: 0, medium: 0, low: 0 },\n  instagram_ads: { total: 0, high: 0, medium: 0, low: 0 },\n  tiktok:        { total: 0, high: 0, medium: 0, low: 0 },\n  ig_organic:    { total: 0, high: 0, medium: 0, low: 0 },\n};\n\nconst validContents = [];\n\nfor (const item of items) {\n  if (item.json._empty || item.json._error || item.json._filtered) continue;\n  const platform = item.json._platform || 'unknown';\n  const quality  = item.json._qualitySignal || 'low';\n  if (summary[platform]) {\n    summary[platform].total++;\n    if (summary[platform][quality] !== undefined) summary[platform][quality]++;\n  }\n  validContents.push({\n    platform, quality,\n    text:       item.json._adText || '',\n    link:       item.json._adLink || '',\n    daysActive: item.json._daysActive || 0,\n    views:      item.json._views || 0,\n    raw:        item.json,\n  });\n}\n\nconst total = validContents.length;\nconsole.log(`Resumen: ${total} contenidos — Meta:${summary.facebook.total+summary.instagram_ads.total} TK:${summary.tiktok.total} IG:${summary.ig_organic.total}`);\n\nreturn [{\n  json: {\n    contents: validContents, summary, totalContents: total,\n    keyword:              config.keyword,\n    search_id:            config.search_id,\n    supabase_url:         config.supabase_url,\n    supabase_service_key: config.supabase_service_key,\n    dna_expert:           config.dna_expert,\n    dna_audience:         config.dna_audience,\n    dna_product:          config.dna_product,\n  }\n}];"
+      }
+    },
+    {
+      "id": "qq171717-0000-0000-0000-000000000011",
+      "name": "Guardar en DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 500],
+      "parameters": {
+        "jsCode": "const { contents, search_id, supabase_url, supabase_service_key } = $input.first().json;\n\nconsole.log('Guardar en DB — search_id:', search_id, '| contents:', (contents||[]).length);\n\nif (!search_id || !supabase_url || !supabase_service_key) {\n  console.log('Sin search_id/supabase — skip. Vals:', { search_id: !!search_id, url: !!supabase_url, key: !!supabase_service_key });\n  return [{ json: { done: true, saved: 0, skipped: true } }];\n}\n\nconst headers = {\n  'Authorization': `Bearer ${supabase_service_key}`,\n  'apikey': supabase_service_key,\n  'Content-Type': 'application/json',\n  'Prefer': 'resolution=ignore-duplicates,return=minimal'\n};\n\nconst toDateStr = (val) => {\n  if (!val) return new Date().toISOString().split('T')[0];\n  try {\n    const d = typeof val === 'number' ? new Date(val * 1000) : new Date(val);\n    const s = d.toISOString().split('T')[0];\n    return s < '2000-01-01' ? new Date().toISOString().split('T')[0] : s;\n  } catch { return new Date().toISOString().split('T')[0]; }\n};\n\nlet savedCount = 0;\n\nfor (const content of (contents || [])) {\n  const raw = content.raw || {};\n  let adArchiveId, pageId, pageName, pageUrl, pageLikes, adStartDate, daysActive, adType, adLink, mediaUrl;\n\n  if (content.platform === 'facebook' || content.platform === 'instagram_ads') {\n    adArchiveId = String(raw.adArchiveID || raw.adArchiveId || raw.id || `meta_${Date.now()}_${Math.random().toString(36).slice(2)}`);\n    pageId      = String(raw.pageID || raw.pageId || raw.page_id || 'meta');\n    pageName    = raw.pageName || raw.page_name || raw.advertiserName || raw.snapshot?.page_name || 'Meta Ad';\n    pageUrl     = raw.pageUrl || raw.page_url || '';\n    pageLikes   = Number(raw.pageLikes || raw.page_likes || 0);\n    adStartDate = toDateStr(raw.startDate || raw.ad_delivery_start_time || raw.start_date);\n    daysActive  = Number(raw._daysActive || content.daysActive || 0);\n    adType      = (raw.isVideo || raw.snapshot?.videos?.length > 0) ? 'video' : 'image';\n    adLink      = content.link || raw.adUrl || raw.ad_snapshot_url || `https://www.facebook.com/ads/library/?id=${adArchiveId}`;\n    mediaUrl    = raw.snapshot?.videos?.[0]?.video_hd_url || raw.snapshot?.images?.[0]?.original_image_url || null;\n  } else if (content.platform === 'tiktok') {\n    adArchiveId = String(raw.id || raw.videoId || `tk_${Date.now()}_${Math.random().toString(36).slice(2)}`);\n    pageId      = String(raw.authorMeta?.id || raw.author?.id || 'tiktok');\n    pageName    = raw.authorMeta?.name || raw.author?.nickname || raw.authorMeta?.nickName || 'TikTok';\n    pageUrl     = `https://www.tiktok.com/@${raw.authorMeta?.name || raw.author?.uniqueId || ''}`;\n    pageLikes   = Number(raw.authorMeta?.fans || raw.authorMeta?.followers || 0);\n    adStartDate = toDateStr(raw.createTime);\n    daysActive  = Number(raw._ageInDays || content.daysActive || 0);\n    adType      = 'video';\n    adLink      = content.link || raw.webVideoUrl || raw.shareUrl || '';\n    mediaUrl    = raw.videoMeta?.playAddr || raw.video?.playAddr || null;\n  } else {\n    adArchiveId = String(raw.id || raw.shortCode || `ig_${Date.now()}_${Math.random().toString(36).slice(2)}`);\n    pageId      = String(raw.ownerId || raw.owner?.id || 'instagram');\n    pageName    = raw.ownerUsername || raw.owner?.username || 'Instagram';\n    pageUrl     = `https://www.instagram.com/${raw.ownerUsername || raw.owner?.username || ''}/`;\n    pageLikes   = Number(raw.likesCount || raw.likeCount || 0);\n    adStartDate = toDateStr(raw.timestamp || raw.takenAt);\n    daysActive  = Number(raw._ageInDays || content.daysActive || 0);\n    adType      = raw._isVideo ? 'video' : 'image';\n    adLink      = content.link || (raw.shortCode ? `https://www.instagram.com/p/${raw.shortCode}/` : '');\n    mediaUrl    = raw.videoUrl || raw.displayUrl || null;\n  }\n\n  const record = {\n    search_id,\n    ad_archive_id: adArchiveId,\n    page_id:    pageId   || 'unknown',\n    page_name:  pageName || 'unknown',\n    page_url:   pageUrl  || null,\n    page_likes: pageLikes,\n    ad_start_date: adStartDate,\n    days_active:   daysActive,\n    ad_type:       adType,\n    original_ad_copy: (content.text || '').slice(0, 5000) || null,\n    media_url:   mediaUrl || null,\n    media_description: null,\n    summary: null,\n    raw_data: {\n      _platform:   content.platform,\n      _quality:    content.quality,\n      _views:      content.views || raw._views || 0,\n      _adLink:     adLink,\n      _daysActive: daysActive,\n    }\n  };\n\n  try {\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: `${supabase_url}/rest/v1/ads`,\n      headers,\n      body: record,\n      json: true\n    });\n    savedCount++;\n  } catch(e) {\n    console.log(`Error guardando (${content.platform} ${adArchiveId}):`, e.message);\n  }\n}\n\nconst total = (contents || []).length;\ntry {\n  await this.helpers.httpRequest({\n    method: 'PATCH',\n    url: `${supabase_url}/rest/v1/ad_searches?id=eq.${search_id}`,\n    headers: { ...headers, 'Prefer': 'return=minimal' },\n    body: { status: 'completed', total_results: total, filtered_results: savedCount, completed_at: new Date().toISOString() },\n    json: true\n  });\n} catch(e) {\n  console.log('Error actualizando ad_searches:', e.message);\n}\n\nconsole.log(`Guardados ${savedCount}/${total} para search_id=${search_id}`);\nreturn [{ json: { done: true, saved: savedCount, total, search_id } }];"
       }
     },
     {
       "id": "mm131313-0000-0000-0000-00000000000d",
-      "name": "→ Conectar al pipeline de modelado",
+      "name": "Notas",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [2100, 380],
+      "position": [2200, 380],
       "parameters": {
-        "content": "## Conectar aquí\n\nConectar **Preparar Resumen** al pipeline de modelado existente.\n\n**Payload incluye:**\n- `contents[]` — texto, link, plataforma, calidad\n- `dna_expert/audience/product`\n- `telegram_chat_id` + `email`\n- `summaryText` — primer mensaje Telegram\n\n**4 plataformas:**\n- `facebook` — FB Ads (días activo)\n- `instagram_ads` — IG Ads (días activo)\n- `tiktok` — orgánico (views + duración)\n- `ig_organic` — orgánico (views + duración)\n\n**Variable Railway:**\n```\nAPIFY_TOKEN = tu_token\n```\n\n**Actors Apify:**\n- FB/IG Ads: `apify/facebook-ads-scraper`\n- TikTok: `clockworks/free-tiktok-scraper`\n- IG Orgánico: `apify/instagram-hashtag-scraper`",
-        "height": 380,
-        "width": 340
+        "content": "## v9 — 3 Plataformas\n\n**Meta Ads** (1 sesión, FB+IG juntos)\n**TikTok** orgánico\n**IG** orgánico\n\nMax 50 ads por actor, timeout 60s.\n\nToken Apify embebido en Config como fallback.",
+        "height": 200,
+        "width": 260
       }
     }
   ],
   "connections": {
-    "Webhook": {
-      "main": [
-        [{ "node": "Responder OK", "type": "main", "index": 0 }]
-      ]
-    },
-    "Responder OK": {
-      "main": [
-        [{ "node": "Config", "type": "main", "index": 0 }]
-      ]
-    },
+    "Webhook":    { "main": [[{ "node": "Responder OK", "type": "main", "index": 0 }]] },
+    "Responder OK": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
     "Config": {
-      "main": [
-        [
-          { "node": "Buscar FB Ads",      "type": "main", "index": 0 },
-          { "node": "Buscar IG Ads",      "type": "main", "index": 0 },
-          { "node": "Buscar TikTok",      "type": "main", "index": 0 },
-          { "node": "Buscar IG Orgánico", "type": "main", "index": 0 }
-        ]
-      ]
+      "main": [[
+        { "node": "Buscar Meta Ads",    "type": "main", "index": 0 },
+        { "node": "Buscar TikTok",      "type": "main", "index": 0 },
+        { "node": "Buscar IG Orgánico", "type": "main", "index": 0 }
+      ]]
     },
-    "Buscar FB Ads":      { "main": [[{ "node": "Filtrar FB Ads",      "type": "main", "index": 0 }]] },
-    "Buscar IG Ads":      { "main": [[{ "node": "Filtrar IG Ads",      "type": "main", "index": 0 }]] },
+    "Buscar Meta Ads":    { "main": [[{ "node": "Filtrar Meta Ads",    "type": "main", "index": 0 }]] },
     "Buscar TikTok":      { "main": [[{ "node": "Filtrar TikTok",      "type": "main", "index": 0 }]] },
     "Buscar IG Orgánico": { "main": [[{ "node": "Filtrar IG Orgánico", "type": "main", "index": 0 }]] },
-    "Filtrar FB Ads":     { "main": [[{ "node": "Merge FB+IG Ads",     "type": "main", "index": 0 }]] },
-    "Filtrar IG Ads":     { "main": [[{ "node": "Merge FB+IG Ads",     "type": "main", "index": 1 }]] },
-    "Merge FB+IG Ads":    { "main": [[{ "node": "Merge con TikTok",    "type": "main", "index": 0 }]] },
-    "Filtrar TikTok":     { "main": [[{ "node": "Merge con TikTok",    "type": "main", "index": 1 }]] },
-    "Merge con TikTok":      { "main": [[{ "node": "Merge con IG Orgánico", "type": "main", "index": 0 }]] },
-    "Filtrar IG Orgánico":   { "main": [[{ "node": "Merge con IG Orgánico", "type": "main", "index": 1 }]] },
-    "Merge con IG Orgánico": { "main": [[{ "node": "Preparar Resumen",      "type": "main", "index": 0 }]] }
+    "Filtrar Meta Ads":    { "main": [[{ "node": "Merge Meta+TikTok",    "type": "main", "index": 0 }]] },
+    "Filtrar TikTok":      { "main": [[{ "node": "Merge Meta+TikTok",    "type": "main", "index": 1 }]] },
+    "Merge Meta+TikTok":   { "main": [[{ "node": "Merge con IG Orgánico", "type": "main", "index": 0 }]] },
+    "Filtrar IG Orgánico": { "main": [[{ "node": "Merge con IG Orgánico", "type": "main", "index": 1 }]] },
+    "Merge con IG Orgánico": { "main": [[{ "node": "Preparar Resumen", "type": "main", "index": 0 }]] },
+    "Preparar Resumen":    { "main": [[{ "node": "Guardar en DB",      "type": "main", "index": 0 }]] }
   },
   "pinData": {},
   "settings": {

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import {
   Layers, BookOpen, Search, Video, Users, Sparkles, Film,
-  FileText, Activity, Zap, Menu, X,
+  FileText, Activity, Zap, Menu, X, BarChart2,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { label: 'Referentes', href: '/referentes', icon: Search },
       { label: 'Video inspiration', href: '/video-inspiration', icon: Video },
       { label: 'Competencia', href: '/competitors', icon: Users },
+      { label: 'Encuestas', href: '/surveys', icon: BarChart2 },
     ],
   },
   {
