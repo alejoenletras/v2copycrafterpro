@@ -184,9 +184,21 @@ INSTRUCCIONES IMPORTANTES:
     let analysis;
     try {
       analysis = JSON.parse(textContent);
-    } catch (parseErr) {
-      console.error('JSON parse error:', (parseErr as Error).message, 'Raw:', textContent.slice(0, 200));
-      throw new Error('Error parseando respuesta de Gemini');
+    } catch {
+      // Fallback: try to extract JSON from the response
+      console.log('Direct parse failed, trying extraction. Raw start:', textContent.slice(0, 300));
+      console.log('Raw end:', textContent.slice(-300));
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          analysis = JSON.parse(jsonMatch[0]);
+        } catch {
+          console.error('Extraction also failed. Full raw length:', textContent.length);
+          throw new Error('Error parseando respuesta de Gemini — JSON inválido');
+        }
+      } else {
+        throw new Error('Gemini no devolvió JSON válido');
+      }
     }
 
     // Log whether audience_dna exists
