@@ -32,16 +32,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
       const { data } = await supabase
         .from('user_profiles' as any)
         .select('*')
         .eq('id', userId)
         .single();
-      setProfile((data as any) ?? null);
+      const p = (data as any) ?? null;
+      setProfile(p);
+      return p;
     } catch {
       setProfile(null);
+      return null;
     }
   }, []);
 
@@ -49,46 +52,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
-  // Initialize auth state
   useEffect(() => {
     let mounted = true;
 
-    // Hard timeout — NEVER spinner more than 3 seconds
+    // Hard safety: max 4 seconds loading
     const hardTimeout = setTimeout(() => {
       if (mounted) setLoading(false);
-    }, 3000);
+    }, 4000);
+
+    const done = () => {
+      if (mounted) {
+        setLoading(false);
+        clearTimeout(hardTimeout);
+      }
+    };
+
+    // Race: profile fetch with 3s timeout
+    const fetchWithTimeout = async (userId: string) => {
+      const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+      const fetch = fetchProfile(userId);
+      await Promise.race([fetch, timeout]);
+    };
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
       if (session?.user) {
         setUser(session.user);
-        // Fetch profile in background — don't block loading
-        fetchProfile(session.user.id).catch(() => {});
+        await fetchWithTimeout(session.user.id);
       }
-      setLoading(false);
-      clearTimeout(hardTimeout);
-    }).catch(() => {
-      if (mounted) setLoading(false);
-      clearTimeout(hardTimeout);
-    });
+      done();
+    }).catch(() => done());
 
-    // Listen for future auth changes (login, logout, token refresh)
+    // Listen for future changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!mounted) return;
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        if (currentUser) {
-          await fetchProfile(currentUser.id);
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+          await fetchProfile(u.id);
         } else {
           setProfile(null);
         }
-        setLoading(false);
+        done();
       }
     );
 
     return () => {
       mounted = false;
+      clearTimeout(hardTimeout);
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
