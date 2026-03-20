@@ -61,6 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfile]);
 
   useEffect(() => {
+    // Normalize domain: redirect www to non-www for consistent auth
+    if (typeof window !== 'undefined' && window.location.hostname === 'www.hooq.online') {
+      window.location.href = window.location.href.replace('www.hooq.online', 'hooq.online');
+      return;
+    }
+
     // Safety timeout — never stay loading forever
     const timeout = setTimeout(() => setLoading(false), 5000);
 
