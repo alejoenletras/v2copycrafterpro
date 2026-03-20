@@ -19,112 +19,95 @@ function computeFrequencies(values: string[]) {
     .sort((a, b) => b.count - a.count);
 }
 
-const analysisToolSchema = {
-  name: 'deliver_survey_analysis',
-  description: 'Entrega el análisis completo de la encuesta de marketing',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      executive_summary: { type: 'string' as const },
-      key_findings: { type: 'array' as const, items: { type: 'string' as const } },
-      quantitative: {
-        type: 'array' as const,
-        items: {
-          type: 'object' as const,
-          properties: {
-            column: { type: 'string' as const }, top_answer: { type: 'string' as const },
-            insight: { type: 'string' as const }, notable_pattern: { type: 'string' as const },
-          },
-          required: ['column', 'top_answer', 'insight', 'notable_pattern'],
-        },
-      },
-      qualitative_themes: {
-        type: 'array' as const,
-        items: {
-          type: 'object' as const,
-          properties: {
-            theme: { type: 'string' as const }, description: { type: 'string' as const },
-            frequency: { type: 'string' as const, enum: ['muy común', 'común', 'ocasional'] },
-            sentiment: { type: 'string' as const, enum: ['positivo', 'negativo', 'neutro', 'mixto'] },
-            verbatims: { type: 'array' as const, items: { type: 'string' as const } },
-            marketing_implication: { type: 'string' as const },
-          },
-          required: ['theme', 'description', 'frequency', 'sentiment', 'verbatims', 'marketing_implication'],
-        },
-      },
-      insights: {
-        type: 'array' as const,
-        items: {
-          type: 'object' as const,
-          properties: {
-            type: { type: 'string' as const, enum: ['pain_point', 'desire', 'belief', 'objection', 'trigger'] },
-            title: { type: 'string' as const }, description: { type: 'string' as const },
-            evidence: { type: 'array' as const, items: { type: 'string' as const } },
-            action: { type: 'string' as const },
-          },
-          required: ['type', 'title', 'description', 'evidence', 'action'],
-        },
-      },
-      ad_angles: {
-        type: 'array' as const,
-        items: {
-          type: 'object' as const,
-          properties: {
-            angle_type: { type: 'string' as const }, hook: { type: 'string' as const },
-            body_copy: { type: 'string' as const }, cta: { type: 'string' as const },
-            insight_source: { type: 'string' as const },
-          },
-          required: ['angle_type', 'hook', 'body_copy', 'cta', 'insight_source'],
-        },
-      },
-      audience_dna: {
-        type: 'object' as const,
-        properties: {
-          ideal_client: { type: 'string' as const, description: `Perfil ULTRA detallado del cliente ideal basado en datos reales de la encuesta. Incluye TODO esto en un solo texto largo y rico:
-- DATOS DEMOGRÁFICOS: Nombre representativo, edad, breve descripción de quién es y su situación actual, mercado objetivo, avatar representativo
-- PROBLEMA PRINCIPAL: El problema central que enfrentan (con carga emocional), problemas secundarios (mínimo 4), 5 emociones viscerales que sienten
-- 5 MAYORES MIEDOS: Incluir el miedo principal y 4 miedos secundarios, todos específicos y viscerales
-- DESEOS SECRETOS MÁS PROFUNDOS: Lo que realmente quieren en el fondo (mínimo 3)
-- CÓMO AFECTAN SUS MIEDOS SUS RELACIONES: Con pareja, hijos, amigos, padres, consigo mismo
-- 5 FRASES OFENSIVAS que personas cercanas les dicen (conversacionales pero dolorosas)
-Usa datos REALES de la encuesta. Cita respuestas textualmente cuando sea posible.` },
-          core_belief: { type: 'string' as const, description: `Creencias, objeciones y framework persuasivo. Incluye TODO esto:
-- CREENCIA PRINCIPAL que los frena (la que deben romper para comprar)
-- Por qué está EQUIVOCADA con argumentación completa
-- 4 CREENCIAS SECUNDARIAS con su refutación (cada una: la creencia, por qué está mal, la visión correcta)
-- OBJECIONES DEL MERCADO: 5 objeciones principales, objeciones prácticas (barreras de recursos), objeciones emocionales (resistencias internas)
-- FRAMEWORK EJACA: Cómo podemos (1) Encorajar sus sueños, (2) Justificar sus errores, (3) Aliviar sus miedos, (4) Confirmar sus sospechas, (5) Apuntar la culpa a sus enemigos — con frases concretas para cada uno
-Basa todo en el vocabulario real de las respuestas de la encuesta.` },
-          testimonials: { type: 'string' as const, description: `Transformación completa y prueba social. Incluye TODO esto:
-- TRANSFORMACIÓN PRIMARIA: Si un genio pudiera darles la solución perfecta, cómo sería su vida
-- CÓMO AFECTARÍA SUS RELACIONES: El cambio en pareja, hijos, amigos, familia
-- IDENTIDAD TRANSFORMADA: Quién quieren SER o cómo quieren ser VISTOS
-- FUTURO PRESUMIDO DE ÉXITO: Descripción concreta del futuro que imaginan
-- BENEFICIOS PRÁCTICOS: 5 resultados tangibles y medibles
-- BENEFICIOS EMOCIONALES: 5 sentimientos y estados internos deseados (certeza, alivio, confianza, claridad, paz)
-- QUÉ HAN INTENTADO ANTES: 3-5 soluciones que probaron y fallaron, y por qué fallaron
-- SOLUCIONES QUE NO QUIEREN: Qué están hartos de intentar
-Extrae de las respuestas reales de la encuesta.` },
-          keywords: { type: 'string' as const, description: `Vocabulario COMPLETO de la audiencia extraído de las respuestas reales. Incluye:
-- PALABRAS PODEROSAS: Mínimo 10 palabras individuales que la audiencia usa con frecuencia (esgotado, paralisado, incerteza, etc.)
-- FRASES PODEROSAS: Mínimo 8 frases textuales que la audiencia dice naturalmente en sus respuestas
-- EN QUÉ BASAN SU ÉXITO: Cómo mide esta audiencia si algo funciona o no
-- KEYWORDS DE MARKETING: 5-10 keywords de posicionamiento relevantes para esta audiencia
-Todo debe ser TEXTUAL de las respuestas de la encuesta, no inventado.` },
-        },
-        required: ['ideal_client', 'core_belief', 'testimonials', 'keywords'],
-      },
-    },
-    required: ['audience_dna', 'executive_summary', 'key_findings', 'quantitative', 'qualitative_themes', 'insights', 'ad_angles'],
-  },
-};
+const SYSTEM_PROMPT = `Eres un experto en análisis de datos de compradores y construcción de avatares de marketing.
+Tu trabajo: analizar los datos de una encuesta y generar un DOCUMENTO COMPLETO de avatar del comprador.
+
+El documento debe tener EXACTAMENTE esta estructura y nivel de profundidad:
+
+# AVATAR DEL COMPRADOR REAL
+[Nombre del negocio/encuesta]
+Construido con datos reales de [N] respuestas verificadas.
+
+## 0) Metodología y Fuentes
+- Describe la muestra, las fuentes de datos y el método de análisis.
+
+## 1) Identidad del Comprador (Quién Es)
+Para CADA pregunta cerrada/demográfica de la encuesta, crear una subsección con:
+- Tabla de distribución (categoría | cantidad | %)
+- Insight clave debajo de cada tabla
+Incluir al menos: dedicación/ocupación, edad, ubicación, ingresos, nivel educativo (si los datos lo permiten)
+
+## 2) Nivel de Experiencia y Sofisticación
+Analizar preguntas sobre experiencia previa, uso de herramientas, nivel técnico.
+- Tablas con distribución
+- Insights devastadores (datos que sorprenden)
+
+## 3) Dolores del Comprador (Voz Real)
+Extraer de las preguntas abiertas los TOP 7 dolores, ordenados por frecuencia.
+Para cada dolor:
+- Título con número de menciones y porcentaje
+- 5-7 frases LITERALES de los encuestados (entre comillas, textuales)
+- "Traducción para copy:" — qué significa este dolor para el copywriter
+
+## 4) Deseos y Motivaciones Profundas (Por Qué Compran)
+TOP 5 motivaciones extraídas de preguntas abiertas sobre motivación/objetivos.
+Para cada una:
+- Título con número de menciones y porcentaje
+- Frases literales del encuestado
+- Traducción para copy
+
+## 5) Segmentos Dentro del Comprador
+Identificar 2-3 segmentos claros basados en los datos (ej: por ingreso, por experiencia, por rol).
+Para cada segmento:
+- Nombre del segmento + cantidad + %
+- Perfil breve
+- "Sus dolores específicos:" con frases literales
+- "Ángulo de copy para este segmento:"
+
+## 6) Objeciones Reales (Lo Que Frena la Compra)
+Dividir en:
+### 6.1 Objeciones Prácticas (se responden con lógica)
+### 6.2 Objeciones Emocionales (se responden con demostración)
+### 6.3 Objeciones de Identidad (las que descalifican)
+Cada objeción con: frase del comprador + dato que la respalda + cómo romperla
+
+## 7) Un Día en la Vida del Comprador (Escenas para Copy)
+6 escenas narrativas cortas que describen momentos reales del comprador.
+Cada escena: título + párrafo de 3-4 líneas. Basadas en los datos reales.
+
+## 8) El GAP Crítico (Por Qué Compran)
+- Lista de 4-5 hechos sobre el comprador (ya intentó, ya probó, ya invierte, sigue sin resolver)
+- Párrafo con el GAP: entre 'quiero X' y 'logro X' hay un abismo de [dolores específicos]
+
+## 9) Lenguaje del Comprador (Banco de Palabras Reales)
+### 9.1 Palabras de DOLOR (las que más repiten)
+Lista de 8-10 palabras con número de menciones y contextos de uso
+### 9.2 Palabras de DESEO (lo que quieren)
+Lista de 5-8 palabras con número de menciones
+### 9.3 Frases Textuales Más Poderosas (para copy directo)
+8-10 frases literales que pueden ser hooks o ángulos de anuncio
+
+## 10) Mensajes Clave para Marketing
+5 mensajes, cada uno conectando un dolor con la solución. Basados en los datos.
+Cada mensaje: título + párrafo de 2-3 líneas listo para usar en copy.
+
+## 11) Claims Usados y Compliance
+Lista de todos los datos/estadísticas usados en el documento con su fuente.
+Evaluación de riesgo de compliance.
+
+REGLAS CRÍTICAS:
+- SOLO usa datos REALES de la encuesta. CERO datos inventados.
+- Las frases literales deben ser TEXTUALES de las respuestas, entre comillas.
+- Los porcentajes deben calcularse correctamente sobre el total de respuestas.
+- El documento debe ser en ESPAÑOL.
+- Formato: Markdown limpio con headers ##, bullets, tablas, y bloques de citas > para frases literales.
+- Extensión esperada: 3000-5000 palabras.`;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const { columns, context } = await req.json() as { columns: Column[]; context?: string };
-
     if (!columns || columns.length === 0) {
       return new Response(JSON.stringify({ error: 'No se recibieron columnas' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -134,6 +117,7 @@ serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
     if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
 
+    // Classify columns
     const quantColumns: Array<{ name: string; frequencies: ReturnType<typeof computeFrequencies> }> = [];
     const qualColumns: Array<{ name: string; sample: string[] }> = [];
 
@@ -143,33 +127,22 @@ serve(async (req) => {
       if (unique <= 15 && nonEmpty.length > 0) {
         quantColumns.push({ name: col.name, frequencies: computeFrequencies(col.values) });
       } else if (nonEmpty.length > 0) {
-        qualColumns.push({ name: col.name, sample: nonEmpty.slice(0, 50) });
+        qualColumns.push({ name: col.name, sample: nonEmpty.slice(0, 80) });
       }
     }
-
     const totalResponses = columns[0]?.values.filter(v => v.trim()).length ?? 0;
 
-    const userPrompt = `Eres un experto en análisis de encuestas de marketing.
-Analiza esta encuesta con ${totalResponses} respuestas y entrega el análisis completo usando la herramienta deliver_survey_analysis.
-${context ? `\nCONTEXTO: ${context}\n` : ''}
-DATOS CUANTITATIVOS:
+    const userPrompt = `Analiza esta encuesta con ${totalResponses} respuestas y genera el documento completo de Avatar del Comprador.
+${context ? `\nCONTEXTO DEL NEGOCIO:\n${context}\n` : ''}
+DATOS CUANTITATIVOS (preguntas cerradas):
 ${JSON.stringify(quantColumns, null, 2)}
 
-DATOS CUALITATIVOS (muestra):
+DATOS CUALITATIVOS (preguntas abiertas — respuestas reales):
 ${JSON.stringify(qualColumns, null, 2)}
 
-IMPORTANTE — GENERA audience_dna PRIMERO, antes que cualquier otro campo:
-- Cada campo de audience_dna debe ser DETALLADO y COMPLETO
-- Usa datos REALES y citas TEXTUALES de las respuestas de la encuesta
-- Sigue las instrucciones de cada campo al pie de la letra — incluye TODOS los sub-elementos listados
-- El ideal_client debe incluir: datos demográficos, problema principal, problemas secundarios, emociones, miedos, deseos secretos, impacto en relaciones, frases ofensivas que les dicen
-- El core_belief debe incluir: creencia principal + refutación, 4 creencias secundarias, objeciones, framework EJACA completo
-- El testimonials debe incluir: transformación primaria, identidad transformada, beneficios prácticos y emocionales, qué han intentado antes
-- El keywords debe incluir: palabras poderosas, frases textuales, métricas de éxito, keywords de marketing
+Genera el documento COMPLETO con las 11 secciones. Usa SOLO datos reales de la encuesta.`;
 
-Limita a máximo 4 items en quantitative, 4 en qualitative_themes, 5 en insights, 3 en ad_angles.`;
-
-    console.log('analyze-survey: calling Claude Sonnet, totalResponses:', totalResponses);
+    console.log('analyze-survey: calling Claude Opus 4.6, totalResponses:', totalResponses);
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -179,32 +152,24 @@ Limita a máximo 4 items en quantitative, 4 en qualitative_themes, 5 en insights
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 8000,
-        tools: [analysisToolSchema],
-        tool_choice: { type: 'tool', name: 'deliver_survey_analysis' },
+        model: 'claude-opus-4-6',
+        max_tokens: 16000,
+        system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],
       }),
     });
 
     const data = await response.json();
-
     if (data.error) {
       console.error('Claude API error:', JSON.stringify(data.error));
       throw new Error(data.error.message || JSON.stringify(data.error));
     }
 
-    const toolUse = data.content?.find((b: any) => b.type === 'tool_use');
-    if (!toolUse) {
-      console.error('No tool_use in response:', JSON.stringify(data.content).slice(0, 500));
-      throw new Error('Claude no invocó la herramienta de análisis');
-    }
-
-    const analysis = toolUse.input;
-    console.log('analyze-survey: success. audience_dna present:', !!analysis.audience_dna);
+    const document = data.content?.[0]?.text || '';
+    console.log('analyze-survey: success, document length:', document.length);
 
     return new Response(JSON.stringify({
-      analysis,
+      document,
       total_responses: totalResponses,
       quant_columns: quantColumns.length,
       qual_columns: qualColumns.length,

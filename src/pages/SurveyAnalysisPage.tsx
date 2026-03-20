@@ -1,13 +1,9 @@
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  UploadCloud, FileSpreadsheet, X, Sparkles, ChevronDown, ChevronUp,
-  Copy, Check, Lightbulb, BarChart2, MessageSquareQuote, Target,
-  TrendingUp, AlertCircle, Users, Megaphone, Brain, CheckCircle2,
+  UploadCloud, FileSpreadsheet, X, Sparkles, Download, Copy, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -49,98 +45,40 @@ function parseCSV(text: string): { columns: { name: string; values: string[] }[]
   return { columns };
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
-interface QuantStat { column: string; top_answer: string; insight: string; notable_pattern: string }
-interface QualTheme {
-  theme: string; description: string; frequency: string; sentiment: string;
-  verbatims: string[]; marketing_implication: string;
-}
-interface Insight {
-  type: 'pain_point' | 'desire' | 'belief' | 'objection' | 'trigger';
-  title: string; description: string; evidence: string[]; action: string;
-}
-interface AdAngle {
-  angle_type: string; hook: string; body_copy: string; cta: string; insight_source: string;
-}
-interface AudienceDNA { ideal_client: string; core_belief: string; testimonials: string; keywords: string }
-interface SurveyAnalysis {
-  executive_summary: string;
-  key_findings: string[];
-  quantitative: QuantStat[];
-  qualitative_themes: QualTheme[];
-  insights: Insight[];
-  ad_angles: AdAngle[];
-  audience_dna: AudienceDNA;
-}
-
-// ─── Small helpers ─────────────────────────────────────────────────────────────
-function useCopy() {
-  const [copied, setCopied] = useState<string | null>(null);
-  const copy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
-  };
-  return { copied, copy };
-}
-
-function CopyButton({ text, id }: { text: string; id: string }) {
-  const { copied, copy } = useCopy();
-  return (
-    <button
-      onClick={() => copy(text, id)}
-      className="ml-2 p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-    >
-      {copied === id ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
-    </button>
-  );
-}
-
-const INSIGHT_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  pain_point:  { label: 'Dolor',       color: 'bg-red-500/10 text-red-400 border-red-500/20',    icon: <AlertCircle size={13} /> },
-  desire:      { label: 'Deseo',       color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: <TrendingUp size={13} /> },
-  belief:      { label: 'Creencia',    color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Brain size={13} /> },
-  objection:   { label: 'Objeción',    color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: <MessageSquareQuote size={13} /> },
-  trigger:     { label: 'Disparador',  color: 'bg-violet-500/10 text-violet-400 border-violet-500/20', icon: <Target size={13} /> },
-};
-
-const ANGLE_COLORS: Record<string, string> = {
-  dolor: 'bg-red-500/10 text-red-400',
-  deseo: 'bg-emerald-500/10 text-emerald-400',
-  prueba_social: 'bg-blue-500/10 text-blue-400',
-  transformación: 'bg-violet-500/10 text-violet-400',
-  objeción: 'bg-amber-500/10 text-amber-400',
-};
-
-const SENTIMENT_COLOR: Record<string, string> = {
-  positivo: 'text-emerald-400',
-  negativo: 'text-red-400',
-  neutro: 'text-muted-foreground',
-  mixto: 'text-amber-400',
-};
-
-function Collapsible({ title, icon, children, defaultOpen = false }: {
-  title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-border rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-2 font-medium text-sm">{icon}{title}</div>
-        {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
-      </button>
-      {open && <div className="px-5 py-4">{children}</div>}
-    </div>
-  );
+// ─── Simple markdown renderer ─────────────────────────────────────────────────
+function renderMarkdown(md: string): string {
+  return md
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-6 mb-2 text-foreground">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold mt-8 mb-3 text-foreground border-b border-border/40 pb-2">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-6 mb-4 text-foreground">$1</h1>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Blockquotes
+    .replace(/^> (.+)$/gm, '<blockquote class="border-l-3 border-violet-500/40 pl-4 py-1 my-2 text-sm italic text-muted-foreground">$1</blockquote>')
+    // Bullet lists
+    .replace(/^[•\-] (.+)$/gm, '<li class="ml-4 text-sm leading-relaxed list-disc">$1</li>')
+    // Tables (simple: | col | col |)
+    .replace(/^\|(.+)\|$/gm, (match) => {
+      const cells = match.split('|').filter(c => c.trim());
+      if (cells.every(c => /^[-:\s]+$/.test(c))) return ''; // separator row
+      const isHeader = cells.every(c => c.trim().length > 0);
+      const tag = isHeader ? 'td' : 'td';
+      return `<tr>${cells.map(c => `<${tag} class="px-3 py-1.5 text-sm border border-border/30">${c.trim()}</${tag}>`).join('')}</tr>`;
+    })
+    // Wrap consecutive <tr> in <table>
+    .replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table class="w-full border-collapse my-4 text-sm">$1</table>')
+    // Paragraphs (lines that aren't already HTML)
+    .replace(/^(?!<[a-z])((?!\s*$).+)$/gm, '<p class="text-sm leading-relaxed my-1.5">$1</p>')
+    // Line breaks
+    .replace(/\n\n/g, '<div class="h-2"></div>');
 }
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 export default function SurveyAnalysisPage() {
   const { toast } = useToast();
-  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [fileName, setFileName] = useState('');
@@ -148,9 +86,8 @@ export default function SurveyAnalysisPage() {
   const [totalRows, setTotalRows] = useState(0);
   const [context, setContext] = useState('');
   const [loading, setLoading] = useState(false);
-  const [analysis, setAnalysis] = useState<SurveyAnalysis | null>(null);
-  const [savingDna, setSavingDna] = useState(false);
-  const [dnaSaved, setDnaSaved] = useState(false);
+  const [document, setDocument] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const handleFile = (file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -168,8 +105,7 @@ export default function SurveyAnalysisPage() {
       setColumns(parsed);
       setFileName(file.name);
       setTotalRows(parsed[0]?.values.filter(v => v.trim()).length ?? 0);
-      setAnalysis(null);
-      setDnaSaved(false);
+      setDocument('');
     };
     reader.readAsText(file);
   };
@@ -183,9 +119,8 @@ export default function SurveyAnalysisPage() {
   const handleAnalyze = async () => {
     if (columns.length === 0) return;
     setLoading(true);
-    setAnalysis(null);
+    setDocument('');
     try {
-      // Limitar payload: máximo 200 respuestas por columna para no saturar la función
       const trimmedColumns = columns.map(col => ({
         name: col.name,
         values: col.values.slice(0, 200),
@@ -196,16 +131,11 @@ export default function SurveyAnalysisPage() {
       });
 
       if (error) throw new Error(error.message);
-      if (!data) throw new Error('La función no devolvió datos. Verifica que analyze-survey esté desplegada.');
+      if (!data) throw new Error('La función no devolvió datos.');
       if (data.error) throw new Error(data.error);
-      if (!data.analysis) throw new Error(`Respuesta inesperada: ${JSON.stringify(data).slice(0, 200)}`);
+      if (!data.document) throw new Error('No se generó el documento. Intenta de nuevo.');
 
-      // Ensure audience_dna is an object, not a string
-      const result = data.analysis;
-      if (result.audience_dna && typeof result.audience_dna === 'string') {
-        try { result.audience_dna = JSON.parse(result.audience_dna); } catch { /* keep as-is */ }
-      }
-      setAnalysis(result);
+      setDocument(data.document);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast({ title: 'Error al analizar', description: msg, variant: 'destructive' });
@@ -214,31 +144,22 @@ export default function SurveyAnalysisPage() {
     }
   };
 
-  const handleSaveDna = async () => {
-    if (!analysis?.audience_dna) return;
-    setSavingDna(true);
-    try {
-      // Ensure data is a proper object, not a stringified JSON
-      let dnaData = analysis.audience_dna;
-      if (typeof dnaData === 'string') {
-        try { dnaData = JSON.parse(dnaData); } catch { /* keep as-is */ }
-      }
-      const { error } = await supabase.from('dnas').insert({
-        user_id: 'default-user',
-        type: 'audience',
-        name: `Audiencia — ${fileName.replace('.csv', '')}`,
-        data: dnaData,
-      });
-      if (error) throw new Error(error.message);
-      setDnaSaved(true);
-      toast({ title: 'DNA guardado', description: 'DNA de Audiencia creado correctamente' });
-      setTimeout(() => navigate('/dnas'), 1200);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: 'Error al guardar', description: msg, variant: 'destructive' });
-    } finally {
-      setSavingDna(false);
-    }
+  const handleDownload = () => {
+    if (!document) return;
+    const blob = new Blob([document], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = window.document.createElement('a');
+    a.href = url;
+    a.download = `Avatar_Comprador_${fileName.replace('.csv', '')}_${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyAll = () => {
+    navigator.clipboard.writeText(document);
+    setCopied(true);
+    toast({ title: 'Documento copiado al portapapeles' });
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -247,7 +168,7 @@ export default function SurveyAnalysisPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Análisis de Encuestas</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Sube un CSV de encuesta y obtén insights cuantitativos, cualitativos, perfiles de audiencia y ángulos de anuncios.
+          Sube un CSV y obtén un documento completo de Avatar del Comprador con datos reales.
         </p>
       </div>
 
@@ -276,7 +197,7 @@ export default function SurveyAnalysisPage() {
               </div>
             </div>
             <button
-              onClick={(e) => { e.stopPropagation(); setColumns([]); setFileName(''); setAnalysis(null); setDnaSaved(false); }}
+              onClick={(e) => { e.stopPropagation(); setColumns([]); setFileName(''); setDocument(''); }}
               className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
             >
               <X size={16} />
@@ -286,12 +207,12 @@ export default function SurveyAnalysisPage() {
         <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
       </div>
 
-      {/* Context */}
-      {columns.length > 0 && (
+      {/* Context + Analyze */}
+      {columns.length > 0 && !document && (
         <div className="space-y-2">
           <label className="text-sm font-medium">Contexto del negocio <span className="text-muted-foreground font-normal">(opcional)</span></label>
           <Textarea
-            placeholder="Ej: Somos una consultora de marketing para coaches. Esta encuesta fue a nuestra lista de email de 2.400 personas..."
+            placeholder="Ej: Somos SaleADS.ai, vendemos un software de IA para publicidad. Esta encuesta fue a compradores del lanzamiento de enero 2026..."
             value={context}
             onChange={e => setContext(e.target.value)}
             className="resize-none text-sm"
@@ -305,187 +226,49 @@ export default function SurveyAnalysisPage() {
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                Analizando encuesta...
+                Generando Avatar del Comprador con Opus... (puede tardar 1-2 min)
               </span>
             ) : (
-              <span className="flex items-center gap-2"><Sparkles size={15} />Analizar encuesta</span>
+              <span className="flex items-center gap-2"><Sparkles size={15} />Generar Avatar del Comprador</span>
             )}
           </Button>
         </div>
       )}
 
-      {/* Results */}
-      {analysis && (
+      {/* Document result */}
+      {document && (
         <div className="space-y-4">
-          {/* Executive summary */}
-          <div className="border border-violet-500/20 bg-violet-500/5 rounded-xl p-5 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-violet-300">
-              <Lightbulb size={15} /> Resumen ejecutivo
-            </div>
-            <p className="text-sm leading-relaxed">{analysis.executive_summary}</p>
-            <div className="grid gap-2 pt-1">
-              {analysis.key_findings.map((f, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 size={14} className="text-violet-400 mt-0.5 shrink-0" />
-                  <span>{f}</span>
-                </div>
-              ))}
+          {/* Action bar */}
+          <div className="flex items-center justify-between border border-border/40 rounded-xl px-4 py-3 bg-muted/20">
+            <p className="text-sm text-muted-foreground">
+              Documento generado · {document.length.toLocaleString()} caracteres
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopyAll}>
+                {copied ? <Check size={14} className="mr-1.5 text-green-500" /> : <Copy size={14} className="mr-1.5" />}
+                {copied ? 'Copiado' : 'Copiar todo'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownload}>
+                <Download size={14} className="mr-1.5" />
+                Descargar .md
+              </Button>
             </div>
           </div>
 
-          {/* Quantitative */}
-          {analysis.quantitative?.length > 0 && (
-            <Collapsible title={`Análisis cuantitativo (${analysis.quantitative.length} preguntas)`} icon={<BarChart2 size={15} className="text-blue-400" />} defaultOpen>
-              <div className="space-y-4">
-                {analysis.quantitative.map((q, i) => (
-                  <div key={i} className="border border-border rounded-lg p-4 space-y-1.5">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{q.column}</p>
-                    <p className="text-sm font-medium">{q.top_answer}</p>
-                    <p className="text-sm text-muted-foreground">{q.insight}</p>
-                    {q.notable_pattern && (
-                      <p className="text-xs text-amber-400/80 flex items-center gap-1.5 pt-1">
-                        <TrendingUp size={11} /> {q.notable_pattern}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Collapsible>
-          )}
+          {/* Rendered document */}
+          <div
+            className="border border-border/40 rounded-xl p-6 sm:p-8 bg-background prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(document) }}
+          />
 
-          {/* Qualitative themes */}
-          {analysis.qualitative_themes?.length > 0 && (
-            <Collapsible title={`Temas cualitativos (${analysis.qualitative_themes.length} patrones)`} icon={<MessageSquareQuote size={15} className="text-emerald-400" />} defaultOpen>
-              <div className="space-y-4">
-                {analysis.qualitative_themes.map((t, i) => (
-                  <div key={i} className="border border-border rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold">{t.theme}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{t.frequency}</span>
-                        <span className={`text-xs font-medium ${SENTIMENT_COLOR[t.sentiment] ?? 'text-muted-foreground'}`}>{t.sentiment}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{t.description}</p>
-                    {t.verbatims?.length > 0 && (
-                      <div className="space-y-1.5 pl-3 border-l-2 border-muted">
-                        {t.verbatims.map((v, j) => (
-                          <p key={j} className="text-xs text-muted-foreground italic">"{v}"</p>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-xs text-violet-400/80 flex items-center gap-1.5 pt-1">
-                      <Megaphone size={11} /> {t.marketing_implication}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Collapsible>
-          )}
-
-          {/* Insights */}
-          {analysis.insights?.length > 0 && (
-            <Collapsible title={`Insights de marketing (${analysis.insights.length})`} icon={<Target size={15} className="text-amber-400" />} defaultOpen>
-              <div className="grid gap-3">
-                {analysis.insights.map((ins, i) => {
-                  const meta = INSIGHT_META[ins.type] ?? INSIGHT_META.trigger;
-                  return (
-                    <div key={i} className={`border rounded-lg p-4 space-y-1.5 ${meta.color}`}>
-                      <div className="flex items-center gap-2">
-                        {meta.icon}
-                        <span className="text-xs font-semibold uppercase tracking-wide">{meta.label}</span>
-                        <span className="text-sm font-medium">{ins.title}</span>
-                      </div>
-                      <p className="text-sm opacity-90">{ins.description}</p>
-                      {ins.evidence?.map((ev, j) => (
-                        <p key={j} className="text-xs opacity-70 italic">↳ {ev}</p>
-                      ))}
-                      <p className="text-xs opacity-80 pt-1 font-medium">→ {ins.action}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </Collapsible>
-          )}
-
-          {/* Ad angles */}
-          {analysis.ad_angles?.length > 0 && (
-            <Collapsible title={`Ángulos de anuncios (${analysis.ad_angles.length})`} icon={<Megaphone size={15} className="text-red-400" />} defaultOpen>
-              <div className="space-y-4">
-                {analysis.ad_angles.map((ad, i) => (
-                  <div key={i} className="border border-border rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ANGLE_COLORS[ad.angle_type] ?? 'bg-muted text-muted-foreground'}`}>
-                        {ad.angle_type}
-                      </span>
-                      <CopyButton text={`${ad.hook}\n\n${ad.body_copy}\n\n${ad.cta}`} id={`ad-${i}`} />
-                    </div>
-                    <p className="text-sm font-semibold leading-snug">"{ad.hook}"</p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{ad.body_copy}</p>
-                    <p className="text-xs font-medium text-violet-400">{ad.cta}</p>
-                    <p className="text-xs text-muted-foreground/60 pt-1 italic">Basado en: {ad.insight_source}</p>
-                  </div>
-                ))}
-              </div>
-            </Collapsible>
-          )}
-
-          {/* Audience DNA — always visible, highlighted */}
-          {analysis.audience_dna ? (
-            <div className="border-2 border-violet-500/40 bg-violet-500/5 rounded-xl p-5 space-y-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-violet-300">
-                <Users size={16} />
-                DNA de Audiencia sugerido
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Basado en las respuestas reales de tu encuesta. Guárdalo directamente como DNA de Audiencia en Hooq.
-              </p>
-              {[
-                { key: 'ideal_client', label: 'Cliente ideal' },
-                { key: 'core_belief',  label: 'Creencias y miedos' },
-                { key: 'testimonials', label: 'Transformaciones que busca' },
-                { key: 'keywords',     label: 'Vocabulario de la audiencia' },
-              ].map(({ key, label }) => {
-                const val = analysis.audience_dna[key as keyof AudienceDNA];
-                return (
-                  <div key={key} className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-                      <CopyButton text={val} id={`dna-${key}`} />
-                    </div>
-                    <p className="text-sm leading-relaxed bg-muted/30 rounded-lg px-3 py-2">{val}</p>
-                  </div>
-                );
-              })}
-              <Button
-                onClick={handleSaveDna}
-                disabled={savingDna || dnaSaved}
-                size="lg"
-                className={`w-full mt-2 ${dnaSaved ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-violet-600 hover:bg-violet-700'}`}
-              >
-                {dnaSaved ? (
-                  <span className="flex items-center gap-2"><CheckCircle2 size={16} /> DNA guardado — redirigiendo a DNAs...</span>
-                ) : savingDna ? (
-                  <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                    Guardando...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2"><Users size={16} /> Guardar como DNA de Audiencia</span>
-                )}
-              </Button>
-            </div>
-          ) : (
-            <div className="border-2 border-amber-500/40 bg-amber-500/5 rounded-xl p-5 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-semibold text-amber-400">
-                <AlertCircle size={16} />
-                DNA de Audiencia no generado
-              </div>
-              <p className="text-sm text-muted-foreground">
-                El análisis no incluyó el perfil de audiencia. Esto puede pasar si la encuesta tiene pocas respuestas o si el modelo se quedó sin capacidad. Intenta analizar de nuevo.
-              </p>
-            </div>
-          )}
+          {/* Analyze again */}
+          <Button
+            variant="outline"
+            onClick={() => { setDocument(''); }}
+            className="w-full"
+          >
+            Analizar otra encuesta
+          </Button>
         </div>
       )}
     </div>
