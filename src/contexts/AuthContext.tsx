@@ -61,15 +61,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfile]);
 
   useEffect(() => {
+    // Safety timeout — never stay loading forever
+    const timeout = setTimeout(() => setLoading(false), 5000);
+
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
-        fetchProfile(currentUser.id).finally(() => setLoading(false));
+        fetchProfile(currentUser.id).finally(() => {
+          clearTimeout(timeout);
+          setLoading(false);
+        });
       } else {
+        clearTimeout(timeout);
         setLoading(false);
       }
+    }).catch(() => {
+      clearTimeout(timeout);
+      setLoading(false);
     });
 
     // Listen for auth changes
