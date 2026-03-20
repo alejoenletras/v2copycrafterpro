@@ -188,13 +188,36 @@ export default function SurveyAnalysisPage() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownloadTxt = () => {
     if (!document) return;
-    const blob = new Blob([document], { type: 'text/markdown;charset=utf-8' });
+    const blob = new Blob([document], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = window.document.createElement('a');
     a.href = url;
-    a.download = `Avatar_Comprador_${fileName.replace('.csv', '')}_${new Date().toISOString().split('T')[0]}.md`;
+    a.download = `Avatar_Comprador_${fileName.replace('.csv', '')}_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadDocx = async () => {
+    if (!document) return;
+    // Generate a simple HTML-based .doc file (opens in Word/Google Docs)
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>Avatar del Comprador</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.6;max-width:700px;margin:0 auto;padding:40px}
+h1{font-size:22pt;color:#1a1a2e;border-bottom:2px solid #e94560;padding-bottom:8px}
+h2{font-size:16pt;color:#1a1a2e;margin-top:24px;border-bottom:1px solid #ddd;padding-bottom:4px}
+h3{font-size:13pt;color:#333}
+blockquote{border-left:3px solid #e94560;padding-left:12px;color:#555;font-style:italic;margin:8px 0}
+table{border-collapse:collapse;width:100%;margin:12px 0}
+td,th{border:1px solid #ddd;padding:6px 10px;text-size:10pt}
+li{margin:2px 0}</style></head>
+<body>${renderMarkdown(document)}</body></html>`;
+    const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = window.document.createElement('a');
+    a.href = url;
+    a.download = `Avatar_Comprador_${fileName.replace('.csv', '')}_${new Date().toISOString().split('T')[0]}.doc`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -292,9 +315,13 @@ export default function SurveyAnalysisPage() {
                 {copied ? <Check size={14} className="mr-1.5 text-green-500" /> : <Copy size={14} className="mr-1.5" />}
                 {copied ? 'Copiado' : 'Copiar todo'}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDownload}>
+              <Button variant="outline" size="sm" onClick={handleDownloadTxt}>
                 <Download size={14} className="mr-1.5" />
-                Descargar .md
+                .txt
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownloadDocx}>
+                <Download size={14} className="mr-1.5" />
+                .doc
               </Button>
             </div>
           </div>
