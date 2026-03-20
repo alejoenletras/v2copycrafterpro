@@ -420,45 +420,51 @@ export default function SurveyAnalysisPage() {
             </Collapsible>
           )}
 
-          {/* Audience DNA */}
+          {/* Audience DNA — always visible, highlighted */}
           {analysis.audience_dna && (
-            <Collapsible title="DNA de Audiencia sugerido" icon={<Users size={15} className="text-violet-400" />} defaultOpen>
-              <div className="space-y-4">
-                {[
-                  { key: 'ideal_client', label: 'Cliente ideal' },
-                  { key: 'core_belief',  label: 'Creencias y miedos' },
-                  { key: 'testimonials', label: 'Transformaciones que busca' },
-                  { key: 'keywords',     label: 'Vocabulario de la audiencia' },
-                ].map(({ key, label }) => {
-                  const val = analysis.audience_dna[key as keyof AudienceDNA];
-                  return (
-                    <div key={key} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-                        <CopyButton text={val} id={`dna-${key}`} />
-                      </div>
-                      <p className="text-sm leading-relaxed bg-muted/30 rounded-lg px-3 py-2">{val}</p>
-                    </div>
-                  );
-                })}
-                <Button
-                  onClick={handleSaveDna}
-                  disabled={savingDna || dnaSaved}
-                  className={`w-full mt-2 ${dnaSaved ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-violet-600 hover:bg-violet-700'}`}
-                >
-                  {dnaSaved ? (
-                    <span className="flex items-center gap-2"><CheckCircle2 size={15} /> DNA guardado — redirigiendo...</span>
-                  ) : savingDna ? (
-                    <span className="flex items-center gap-2">
-                      <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      Guardando...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2"><Users size={15} /> Guardar como DNA de Audiencia</span>
-                  )}
-                </Button>
+            <div className="border-2 border-violet-500/40 bg-violet-500/5 rounded-xl p-5 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-violet-300">
+                <Users size={16} />
+                DNA de Audiencia sugerido
               </div>
-            </Collapsible>
+              <p className="text-xs text-muted-foreground">
+                Basado en las respuestas reales de tu encuesta. Guárdalo directamente como DNA de Audiencia en Hooq.
+              </p>
+              {[
+                { key: 'ideal_client', label: 'Cliente ideal' },
+                { key: 'core_belief',  label: 'Creencias y miedos' },
+                { key: 'testimonials', label: 'Transformaciones que busca' },
+                { key: 'keywords',     label: 'Vocabulario de la audiencia' },
+              ].map(({ key, label }) => {
+                const val = analysis.audience_dna[key as keyof AudienceDNA];
+                return (
+                  <div key={key} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
+                      <CopyButton text={val} id={`dna-${key}`} />
+                    </div>
+                    <p className="text-sm leading-relaxed bg-muted/30 rounded-lg px-3 py-2">{val}</p>
+                  </div>
+                );
+              })}
+              <Button
+                onClick={handleSaveDna}
+                disabled={savingDna || dnaSaved}
+                size="lg"
+                className={`w-full mt-2 ${dnaSaved ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-violet-600 hover:bg-violet-700'}`}
+              >
+                {dnaSaved ? (
+                  <span className="flex items-center gap-2"><CheckCircle2 size={16} /> DNA guardado — redirigiendo a DNAs...</span>
+                ) : savingDna ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Guardando...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2"><Users size={16} /> Guardar como DNA de Audiencia</span>
+                )}
+              </Button>
+            </div>
           )}
         </div>
       )}
