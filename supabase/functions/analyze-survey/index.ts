@@ -1,17 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') });
-
-interface Column {
-  name: string;
-  values: string[];
-}
+interface Column { name: string; values: string[] }
 
 function computeFrequencies(values: string[]) {
   const counts: Record<string, number> = {};
@@ -25,6 +19,82 @@ function computeFrequencies(values: string[]) {
     .sort((a, b) => b.count - a.count);
 }
 
+// Gemini JSON schema for structured output
+const responseSchema = {
+  type: 'OBJECT',
+  properties: {
+    executive_summary: { type: 'STRING', description: 'Párrafo de 4-5 oraciones con los hallazgos más importantes' },
+    key_findings: { type: 'ARRAY', items: { type: 'STRING' }, description: '5 hallazgos clave con datos concretos' },
+    quantitative: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          column:          { type: 'STRING' },
+          top_answer:      { type: 'STRING' },
+          insight:         { type: 'STRING' },
+          notable_pattern: { type: 'STRING' },
+        },
+        required: ['column', 'top_answer', 'insight', 'notable_pattern'],
+      },
+    },
+    qualitative_themes: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          theme:                 { type: 'STRING' },
+          description:           { type: 'STRING' },
+          frequency:             { type: 'STRING' },
+          sentiment:             { type: 'STRING' },
+          verbatims:             { type: 'ARRAY', items: { type: 'STRING' } },
+          marketing_implication: { type: 'STRING' },
+        },
+        required: ['theme', 'description', 'frequency', 'sentiment', 'verbatims', 'marketing_implication'],
+      },
+    },
+    insights: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          type:        { type: 'STRING' },
+          title:       { type: 'STRING' },
+          description: { type: 'STRING' },
+          evidence:    { type: 'ARRAY', items: { type: 'STRING' } },
+          action:      { type: 'STRING' },
+        },
+        required: ['type', 'title', 'description', 'evidence', 'action'],
+      },
+    },
+    ad_angles: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          angle_type:     { type: 'STRING' },
+          hook:           { type: 'STRING' },
+          body_copy:      { type: 'STRING' },
+          cta:            { type: 'STRING' },
+          insight_source: { type: 'STRING' },
+        },
+        required: ['angle_type', 'hook', 'body_copy', 'cta', 'insight_source'],
+      },
+    },
+    audience_dna: {
+      type: 'OBJECT',
+      properties: {
+        ideal_client: { type: 'STRING', description: 'Descripción detallada del cliente ideal basada en datos reales de la encuesta' },
+        core_belief:  { type: 'STRING', description: 'Creencias principales, miedos y motivaciones de la audiencia' },
+        testimonials: { type: 'STRING', description: 'Tipo de transformaciones que busca la audiencia' },
+        keywords:     { type: 'STRING', description: 'Vocabulario real que usa la audiencia, extraído de sus respuestas' },
+      },
+      required: ['ideal_client', 'core_belief', 'testimonials', 'keywords'],
+    },
+  },
+  required: ['executive_summary', 'key_findings', 'quantitative', 'qualitative_themes', 'insights', 'ad_angles', 'audience_dna'],
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -37,7 +107,10 @@ serve(async (req) => {
       });
     }
 
-    // Classify columns: <=15 unique values → quantitative, otherwise qualitative
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set — agrégala en Supabase Edge Functions Secrets');
+
+    // Classify columns
     const quantColumns: Array<{ name: string; frequencies: ReturnType<typeof computeFrequencies> }> = [];
     const qualColumns: Array<{ name: string; sample: string[] }> = [];
 
@@ -47,94 +120,80 @@ serve(async (req) => {
       if (unique <= 15 && nonEmpty.length > 0) {
         quantColumns.push({ name: col.name, frequencies: computeFrequencies(col.values) });
       } else if (nonEmpty.length > 0) {
-        // Send sample of up to 60 responses for qualitative analysis
-        qualColumns.push({ name: col.name, sample: nonEmpty.slice(0, 60) });
+        qualColumns.push({ name: col.name, sample: nonEmpty.slice(0, 50) });
       }
     }
 
     const totalResponses = columns[0]?.values.filter(v => v.trim()).length ?? 0;
 
-    const systemPrompt = `Eres un experto en análisis de encuestas de marketing con 15 años de experiencia.
-Tu especialidad es extraer insights accionables para crear estrategias de marketing, definir perfiles de audiencia y generar ángulos de comunicación efectivos.
-Analiza con rigor estadístico los datos cuantitativos y con profundidad psicológica los cualitativos.
-Identifica patrones, pain points, deseos, creencias limitantes y el vocabulario exacto de la audiencia.
-Fundamenta SIEMPRE tus conclusiones en los datos concretos de la encuesta.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional antes ni después.`;
-
-    const userPrompt = `Analiza esta encuesta de marketing con ${totalResponses} respuestas totales.
+    const prompt = `Eres un experto en análisis de encuestas de marketing con 15 años de experiencia.
+Analiza esta encuesta con ${totalResponses} respuestas totales.
 ${context ? `\nCONTEXTO DEL NEGOCIO:\n${context}\n` : ''}
-DATOS CUANTITATIVOS (preguntas cerradas / opción múltiple / ratings):
+DATOS CUANTITATIVOS (preguntas cerradas/opción múltiple/ratings):
 ${JSON.stringify(quantColumns, null, 2)}
 
 DATOS CUALITATIVOS (preguntas abiertas — muestra de respuestas reales):
 ${JSON.stringify(qualColumns, null, 2)}
 
-Genera el análisis completo con exactamente este JSON:
-{
-  "executive_summary": "párrafo de 4-5 oraciones con los hallazgos más importantes y qué implican para el negocio",
-  "key_findings": [
-    "hallazgo 1 con dato concreto",
-    "hallazgo 2 con dato concreto",
-    "hallazgo 3 con dato concreto",
-    "hallazgo 4 con dato concreto",
-    "hallazgo 5 con dato concreto"
-  ],
-  "quantitative": [
-    {
-      "column": "nombre de la pregunta",
-      "top_answer": "respuesta más frecuente con porcentaje",
-      "insight": "qué nos dice este dato para marketing",
-      "notable_pattern": "patrón o dato llamativo adicional"
-    }
-  ],
-  "qualitative_themes": [
-    {
-      "theme": "nombre del tema (2-4 palabras)",
-      "description": "descripción del patrón identificado",
-      "frequency": "muy común | común | ocasional",
-      "sentiment": "positivo | negativo | neutro | mixto",
-      "verbatims": ["cita textual exacta 1", "cita textual exacta 2", "cita textual exacta 3"],
-      "marketing_implication": "cómo usar este tema en la comunicación"
-    }
-  ],
-  "insights": [
-    {
-      "type": "pain_point | desire | belief | objection | trigger",
-      "title": "título corto del insight (máx 6 palabras)",
-      "description": "descripción detallada del insight",
-      "evidence": ["dato o cita que lo respalda"],
-      "action": "cómo aplicarlo en marketing o comunicación"
-    }
-  ],
-  "ad_angles": [
-    {
-      "angle_type": "dolor | deseo | prueba_social | transformación | objeción",
-      "hook": "gancho de apertura del anuncio (máx 15 palabras, primera persona o pregunta directa)",
-      "body_copy": "cuerpo del anuncio (2-3 oraciones que desarrollan el hook)",
-      "cta": "llamado a la acción claro",
-      "insight_source": "en qué dato o patrón de la encuesta se basa este ángulo"
-    }
-  ],
-  "audience_dna": {
-    "ideal_client": "descripción detallada del cliente ideal basada en los datos: quién es, qué hace, situación actual, contexto de vida (3-4 oraciones usando el lenguaje real de las respuestas)",
-    "core_belief": "creencias profundas, miedos, frustraciones y deseos que reveló la encuesta — especificidad máxima con citas o paráfrasis reales",
-    "testimonials": "tipos de resultados y transformaciones que buscan, cómo los expresarían ellos mismos según sus respuestas (usa su vocabulario exacto)",
-    "keywords": "vocabulario exacto que usa esta audiencia en sus respuestas separado por comas — mínimo 15 términos o frases"
-  }
-}`;
+INSTRUCCIONES IMPORTANTES:
+1. Extrae insights accionables: pain points, deseos, creencias, vocabulario exacto de la audiencia
+2. Genera ángulos para anuncios basados en los datos reales
+3. Para "type" en insights usa EXACTAMENTE uno de: pain_point, desire, belief, objection, trigger
+4. Para "frequency" en qualitative_themes usa EXACTAMENTE uno de: muy común, común, ocasional
+5. Para "sentiment" en qualitative_themes usa EXACTAMENTE uno de: positivo, negativo, neutro, mixto
+6. OBLIGATORIO: Genera el campo "audience_dna" con un perfil de audiencia COMPLETO basado en los datos. Este campo es CRÍTICO — el usuario lo necesita para crear su DNA de audiencia. Incluye:
+   - ideal_client: quién es, edad, situación, nivel de experiencia (basado en datos reales)
+   - core_belief: qué creen, qué temen, qué los motiva (usando vocabulario real de las respuestas)
+   - testimonials: qué transformación buscan, de dónde a dónde quieren ir
+   - keywords: las palabras y frases exactas que usa la audiencia, copiadas de sus respuestas`;
 
-    const response = await client.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 6000,
-      messages: [{ role: 'user', content: userPrompt }],
-      system: systemPrompt,
-    });
+    console.log('analyze-survey: calling Gemini 2.5 Flash, totalResponses:', totalResponses);
 
-    const text = (response.content[0] as { type: string; text: string }).text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No se pudo parsear la respuesta del modelo');
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema,
+            temperature: 0.3,
+            maxOutputTokens: 8000,
+          },
+        }),
+      }
+    );
 
-    const analysis = JSON.parse(jsonMatch[0]);
+    const geminiData = await response.json();
+
+    if (geminiData.error) {
+      console.error('Gemini API error:', JSON.stringify(geminiData.error));
+      throw new Error(geminiData.error.message || JSON.stringify(geminiData.error));
+    }
+
+    const textContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textContent) {
+      console.error('Gemini empty response:', JSON.stringify(geminiData).slice(0, 500));
+      throw new Error('Gemini no devolvió contenido');
+    }
+
+    console.log('analyze-survey: Gemini response length:', textContent.length);
+
+    let analysis;
+    try {
+      analysis = JSON.parse(textContent);
+    } catch (parseErr) {
+      console.error('JSON parse error:', (parseErr as Error).message, 'Raw:', textContent.slice(0, 200));
+      throw new Error('Error parseando respuesta de Gemini');
+    }
+
+    // Log whether audience_dna exists
+    console.log('analyze-survey: audience_dna present:', !!analysis.audience_dna);
+    if (analysis.audience_dna) {
+      console.log('analyze-survey: audience_dna keys:', Object.keys(analysis.audience_dna).join(', '));
+    }
 
     return new Response(JSON.stringify({
       analysis,
