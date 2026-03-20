@@ -117,30 +117,37 @@ serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
     if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
 
-    // Classify columns
-    const quantColumns: Array<{ name: string; frequencies: ReturnType<typeof computeFrequencies> }> = [];
-    const qualColumns: Array<{ name: string; sample: string[] }> = [];
+    // Classify columns — frequencies computed on ALL data, sample for qualitative
+    const quantColumns: Array<{ name: string; totalNonEmpty: number; frequencies: ReturnType<typeof computeFrequencies> }> = [];
+    const qualColumns: Array<{ name: string; totalNonEmpty: number; sample: string[] }> = [];
 
     for (const col of columns) {
       const nonEmpty = col.values.filter(v => v.trim());
       const unique = new Set(nonEmpty.map(v => v.trim())).size;
-      if (unique <= 15 && nonEmpty.length > 0) {
-        quantColumns.push({ name: col.name, frequencies: computeFrequencies(col.values) });
+      if (unique <= 20 && nonEmpty.length > 0) {
+        // Quantitative: compute frequencies on ALL responses
+        quantColumns.push({ name: col.name, totalNonEmpty: nonEmpty.length, frequencies: computeFrequencies(col.values) });
       } else if (nonEmpty.length > 0) {
-        qualColumns.push({ name: col.name, sample: nonEmpty.slice(0, 80) });
+        // Qualitative: random sample of 100 responses (representative)
+        const shuffled = [...nonEmpty].sort(() => Math.random() - 0.5);
+        qualColumns.push({ name: col.name, totalNonEmpty: nonEmpty.length, sample: shuffled.slice(0, 100) });
       }
     }
     const totalResponses = columns[0]?.values.filter(v => v.trim()).length ?? 0;
 
-    const userPrompt = `Analiza esta encuesta con ${totalResponses} respuestas y genera el documento completo de Avatar del Comprador.
+    console.log('analyze-survey: totalResponses:', totalResponses, 'quant:', quantColumns.length, 'qual:', qualColumns.length);
+
+    const userPrompt = `Analiza esta encuesta con ${totalResponses} respuestas TOTALES y genera el documento completo de Avatar del Comprador.
+
+IMPORTANTE: Los datos cuantitativos tienen las frecuencias calculadas sobre TODAS las ${totalResponses} respuestas (no una muestra). Los datos cualitativos son una muestra aleatoria representativa de las respuestas abiertas. Los porcentajes y conteos son EXACTOS sobre el total.
 ${context ? `\nCONTEXTO DEL NEGOCIO:\n${context}\n` : ''}
-DATOS CUANTITATIVOS (preguntas cerradas):
+DATOS CUANTITATIVOS (frecuencias sobre ${totalResponses} respuestas totales):
 ${JSON.stringify(quantColumns, null, 2)}
 
-DATOS CUALITATIVOS (preguntas abiertas — respuestas reales):
+DATOS CUALITATIVOS (muestra aleatoria representativa de respuestas abiertas):
 ${JSON.stringify(qualColumns, null, 2)}
 
-Genera el documento COMPLETO con las 11 secciones. Usa SOLO datos reales de la encuesta.`;
+Genera el documento COMPLETO con las 11 secciones. Los datos cuantitativos reflejan el universo TOTAL de ${totalResponses} respuestas. Usa ese número real en el documento.`;
 
     console.log('analyze-survey: calling Claude Opus 4.6 (streaming), totalResponses:', totalResponses);
 

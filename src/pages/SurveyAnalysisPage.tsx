@@ -121,9 +121,10 @@ export default function SurveyAnalysisPage() {
     setLoading(true);
     setDocument('');
     try {
+      // Send all values — the edge function handles sampling
       const trimmedColumns = columns.map(col => ({
         name: col.name,
-        values: col.values.slice(0, 200),
+        values: col.values,
       }));
 
       // Use fetch directly for SSE streaming (supabase.functions.invoke doesn't support streams)
