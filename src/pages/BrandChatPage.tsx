@@ -10,7 +10,7 @@ interface ChatMessage {
 }
 
 const WELCOME_MESSAGE =
-  'Colega, soy el asistente de copy de SaleADS. Pídeme cualquier pieza: un email, un WhatsApp, una descripción de YouTube, un caption, una respuesta a objeción, un texto de landing... lo que necesites, en la voz de SaleADS.';
+  'Soy el asistente de copy de SaleADS. Pídeme cualquier pieza: un email, un WhatsApp, una descripción de YouTube, un caption, una respuesta a objeción, un texto de landing... lo que necesites, en la voz de SaleADS.';
 
 const QUICK_STARTS = [
   'Email de bienvenida',

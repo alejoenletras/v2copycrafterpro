@@ -67,7 +67,8 @@ PALABRAS QUE SÍ USAMOS:
 - Evidencia: en vivo, cronómetro en mano, demostración, mira los resultados, ejemplo real
 
 PALABRAS PROHIBIDAS (nunca usar):
-- "Crack" → usar "Colega" o nombre
+- "Crack" → usar el nombre de la persona o "tú"
+- "Colega" → NO usar. Es exclusivo de Juan ADS. SaleADS corp no dice "colega".
 - "Alto rendimiento" → "Alta conversión"
 - "Clase/curso/programa" → "Demostración en vivo"
 - "Clon digital" → No usar. Bonus eliminado.
@@ -91,7 +92,7 @@ MULETILLAS APROBADAS:
 - "Tu equipo de marketing 24/7" — posicionamiento de valor
 - "No es un curso. Es un sistema que ejecuta." — diferenciación
 - "Déjame mostrarte" — transición a demos
-- "Colega" — saludo corporativo
+- NOTA: "Colega" es EXCLUSIVO de Juan ADS. SaleADS como plataforma NO usa "colega" en ningún contexto.
 
 ═══════════════════════════════════════════════════
 4. FORMALIDAD POR CANAL
