@@ -159,7 +159,7 @@ DATOS CUALITATIVOS (muestra):
 ${JSON.stringify(qualColumns, null, 2)}
 
 IMPORTANTE — audience_dna es el campo MÁS CRÍTICO de todo el análisis:
-- Cada campo de audience_dna debe ser un texto LARGO y ULTRA DETALLADO (mínimo 300 palabras por campo)
+- Cada campo de audience_dna debe ser DETALLADO y COMPLETO
 - Usa datos REALES y citas TEXTUALES de las respuestas de la encuesta
 - Sigue las instrucciones de cada campo al pie de la letra — incluye TODOS los sub-elementos listados
 - El ideal_client debe incluir: datos demográficos, problema principal, problemas secundarios, emociones, miedos, deseos secretos, impacto en relaciones, frases ofensivas que les dicen
@@ -179,8 +179,8 @@ Limita a máximo 4 items en quantitative, 4 en qualitative_themes, 5 en insights
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 16000,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 8000,
         tools: [analysisToolSchema],
         tool_choice: { type: 'tool', name: 'deliver_survey_analysis' },
         messages: [{ role: 'user', content: userPrompt }],
