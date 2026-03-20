@@ -23,7 +23,7 @@ import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-/** Redirects to /login if not authenticated or not approved */
+/** Redirects to /login if not authenticated */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, loading, isApproved } = useAuth();
 
@@ -39,9 +39,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  // If logged in but not approved, LoginPage handles showing the status screen
+  // Profile still loading (null) — show spinner briefly, don't redirect
+  if (profile === null) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-background gap-3">
+        <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+        <p className="text-sm text-zinc-500">Cargando perfil...</p>
+      </div>
+    );
+  }
+
+  // Profile loaded but not approved
   if (!isApproved) {
-    return <Navigate to="/login" replace />;
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-background gap-4">
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-8 max-w-md text-center">
+          <h2 className="text-xl font-bold text-white mb-2">Cuenta pendiente</h2>
+          <p className="text-zinc-400">Tu cuenta está pendiente de aprobación. Te notificaremos cuando sea aprobada.</p>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;
