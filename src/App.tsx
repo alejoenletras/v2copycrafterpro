@@ -14,6 +14,7 @@ import RunsPage from "./pages/RunsPage";
 import ReferentesPage from "./pages/ReferentesPage";
 import ModeledScriptsPage from "./pages/ModeledScriptsPage";
 import SurveyAnalysisPage from "./pages/SurveyAnalysisPage";
+import BrandChatPage from "./pages/BrandChatPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/scripts" element={<ModeledScriptsPage />} />
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/surveys" element={<SurveyAnalysisPage />} />
+            <Route path="/brand-chat" element={<BrandChatPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

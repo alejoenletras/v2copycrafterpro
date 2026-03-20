@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import {
   Layers, BookOpen, Search, Video, Users, Sparkles, Film,
-  FileText, Activity, Zap, Menu, X, BarChart2,
+  FileText, Activity, Zap, Menu, X, BarChart2, MessageSquare,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
@@ -30,6 +30,7 @@ const NAV_GROUPS = [
     items: [
       { label: 'Agente de ads', href: '/ads-agent', icon: Sparkles },
       { label: 'VSL maker', href: '/vsl', icon: Film },
+      { label: 'Chat de marca', href: '/brand-chat', icon: MessageSquare },
     ],
   },
   {
