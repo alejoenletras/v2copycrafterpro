@@ -213,21 +213,100 @@ Deno.serve(async (req) => {
       if (dnas.product) systemPrompt += `\nDNA PRODUCTO:\n${dnas.product}`;
     }
 
+    // Build messages with multimodal content (images, PDFs, text files)
+    const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    const PDF_TYPE = "application/pdf";
+
+    interface Attachment {
+      name: string;
+      media_type: string;
+      data: string;
+    }
+
+    interface IncomingMessage {
+      role: string;
+      content: string;
+      attachments?: Attachment[];
+    }
+
+    const apiMessages = (messages as IncomingMessage[]).map((m) => {
+      if (!m.attachments || m.attachments.length === 0) {
+        return { role: m.role, content: m.content };
+      }
+
+      // Build content blocks for multimodal messages
+      const contentBlocks: any[] = [];
+
+      for (const att of m.attachments) {
+        if (IMAGE_TYPES.includes(att.media_type)) {
+          // Image → vision content block
+          contentBlocks.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: att.media_type,
+              data: att.data,
+            },
+          });
+        } else if (att.media_type === PDF_TYPE) {
+          // PDF → document content block
+          contentBlocks.push({
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: att.data,
+            },
+          });
+        } else {
+          // Text-based files (TXT, CSV, DOC) → decode and include as text
+          try {
+            const decoded = atob(att.data);
+            contentBlocks.push({
+              type: "text",
+              text: `--- Archivo adjunto: ${att.name} ---\n${decoded}\n--- Fin del archivo ---`,
+            });
+          } catch {
+            contentBlocks.push({
+              type: "text",
+              text: `[Archivo adjunto: ${att.name} — no se pudo leer el contenido]`,
+            });
+          }
+        }
+      }
+
+      // Add the user's text message
+      if (m.content && m.content !== "(archivo adjunto)") {
+        contentBlocks.push({ type: "text", text: m.content });
+      } else if (contentBlocks.length > 0 && !contentBlocks.some((b: any) => b.type === "text")) {
+        contentBlocks.push({ type: "text", text: "Analiza los archivos adjuntos." });
+      }
+
+      return { role: m.role, content: contentBlocks };
+    });
+
+    // Check if any message has PDFs → need beta header
+    const hasPdfs = (messages as IncomingMessage[]).some(
+      (m) => m.attachments?.some((a) => a.media_type === PDF_TYPE)
+    );
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    };
+    if (hasPdfs) {
+      headers["anthropic-beta"] = "pdfs-2024-09-25";
+    }
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers,
       body: JSON.stringify({
         model: "claude-opus-4-6",
         max_tokens: 4096,
         system: systemPrompt,
-        messages: messages.map((m: { role: string; content: string }) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        messages: apiMessages,
       }),
     });
 
