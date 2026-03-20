@@ -144,7 +144,7 @@ export default function LoginPage() {
     try {
       await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin + '/dnas' },
+        options: { redirectTo: 'https://hooq.online/dnas' },
       });
     } catch {
       setGoogleLoading(false);
