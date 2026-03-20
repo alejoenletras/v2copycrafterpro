@@ -142,8 +142,9 @@ ${JSON.stringify(qualColumns, null, 2)}
 
 Genera el documento COMPLETO con las 11 secciones. Usa SOLO datos reales de la encuesta.`;
 
-    console.log('analyze-survey: calling Claude Opus 4.6, totalResponses:', totalResponses);
+    console.log('analyze-survey: calling Claude Opus 4.6 (streaming), totalResponses:', totalResponses);
 
+    // Use streaming to keep the connection alive (avoids WallClockTime timeout)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -154,27 +155,76 @@ Genera el documento COMPLETO con las 11 secciones. Usa SOLO datos reales de la e
       body: JSON.stringify({
         model: 'claude-opus-4-6',
         max_tokens: 16000,
+        stream: true,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }],
       }),
     });
 
-    const data = await response.json();
-    if (data.error) {
-      console.error('Claude API error:', JSON.stringify(data.error));
-      throw new Error(data.error.message || JSON.stringify(data.error));
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Claude API error:', errText);
+      throw new Error(`Claude API error: ${response.status}`);
     }
 
-    const document = data.content?.[0]?.text || '';
-    console.log('analyze-survey: success, document length:', document.length);
+    // Stream SSE from Claude → collect text, then return full document
+    // We read the stream to completion but send periodic keepalive data
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
 
-    return new Response(JSON.stringify({
-      document,
-      total_responses: totalResponses,
-      quant_columns: quantColumns.length,
-      qual_columns: qualColumns.length,
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+            try {
+              const event = JSON.parse(jsonStr);
+              if (event.type === 'content_block_delta' && event.delta?.text) {
+                fullText += event.delta.text;
+                // Send chunk to client as SSE
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk: event.delta.text })}\n\n`));
+              }
+              if (event.type === 'message_stop') {
+                // Send final message with full document
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, document: fullText })}\n\n`));
+              }
+              if (event.type === 'error') {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: event.error?.message || 'Error de Claude' })}\n\n`));
+              }
+            } catch { /* skip non-JSON lines */ }
+          }
+        }
+
+        // If we didn't get message_stop, send what we have
+        if (fullText && !fullText.includes('[DONE]')) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, document: fullText })}\n\n`));
+        }
+
+        console.log('analyze-survey: streaming complete, document length:', fullText.length);
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
 
   } catch (error: unknown) {

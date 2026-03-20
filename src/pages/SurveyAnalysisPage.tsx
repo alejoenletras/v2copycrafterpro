@@ -126,16 +126,60 @@ export default function SurveyAnalysisPage() {
         values: col.values.slice(0, 200),
       }));
 
-      const { data, error } = await supabase.functions.invoke('analyze-survey', {
-        body: { columns: trimmedColumns, context: context.trim() || undefined },
+      // Use fetch directly for SSE streaming (supabase.functions.invoke doesn't support streams)
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/analyze-survey`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ columns: trimmedColumns, context: context.trim() || undefined }),
       });
 
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error('La función no devolvió datos.');
-      if (data.error) throw new Error(data.error);
-      if (!data.document) throw new Error('No se generó el documento. Intenta de nuevo.');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(errData.error || `Error ${response.status}`);
+      }
 
-      setDocument(data.document);
+      // Read SSE stream
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.chunk) {
+              accumulated += event.chunk;
+              setDocument(accumulated);
+            }
+            if (event.done && event.document) {
+              setDocument(event.document);
+            }
+            if (event.error) {
+              throw new Error(event.error);
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e;
+          }
+        }
+      }
+
+      if (!accumulated) throw new Error('No se generó el documento. Intenta de nuevo.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast({ title: 'Error al analizar', description: msg, variant: 'destructive' });
