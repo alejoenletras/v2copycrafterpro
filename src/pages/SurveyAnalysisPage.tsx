@@ -431,7 +431,7 @@ export default function SurveyAnalysisPage() {
           )}
 
           {/* Audience DNA — always visible, highlighted */}
-          {analysis.audience_dna && (
+          {analysis.audience_dna ? (
             <div className="border-2 border-violet-500/40 bg-violet-500/5 rounded-xl p-5 space-y-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-violet-300">
                 <Users size={16} />
@@ -474,6 +474,16 @@ export default function SurveyAnalysisPage() {
                   <span className="flex items-center gap-2"><Users size={16} /> Guardar como DNA de Audiencia</span>
                 )}
               </Button>
+            </div>
+          ) : (
+            <div className="border-2 border-amber-500/40 bg-amber-500/5 rounded-xl p-5 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-400">
+                <AlertCircle size={16} />
+                DNA de Audiencia no generado
+              </div>
+              <p className="text-sm text-muted-foreground">
+                El análisis no incluyó el perfil de audiencia. Esto puede pasar si la encuesta tiene pocas respuestas o si el modelo se quedó sin capacidad. Intenta analizar de nuevo.
+              </p>
             </div>
           )}
         </div>

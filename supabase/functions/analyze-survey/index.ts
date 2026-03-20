@@ -115,7 +115,7 @@ Todo debe ser TEXTUAL de las respuestas de la encuesta, no inventado.` },
         required: ['ideal_client', 'core_belief', 'testimonials', 'keywords'],
       },
     },
-    required: ['executive_summary', 'key_findings', 'quantitative', 'qualitative_themes', 'insights', 'ad_angles', 'audience_dna'],
+    required: ['audience_dna', 'executive_summary', 'key_findings', 'quantitative', 'qualitative_themes', 'insights', 'ad_angles'],
   },
 };
 
@@ -158,7 +158,7 @@ ${JSON.stringify(quantColumns, null, 2)}
 DATOS CUALITATIVOS (muestra):
 ${JSON.stringify(qualColumns, null, 2)}
 
-IMPORTANTE — audience_dna es el campo MÁS CRÍTICO de todo el análisis:
+IMPORTANTE — GENERA audience_dna PRIMERO, antes que cualquier otro campo:
 - Cada campo de audience_dna debe ser DETALLADO y COMPLETO
 - Usa datos REALES y citas TEXTUALES de las respuestas de la encuesta
 - Sigue las instrucciones de cada campo al pie de la letra — incluye TODOS los sub-elementos listados
