@@ -64,6 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) {
         setLoading(false);
         clearTimeout(hardTimeout);
+        // Clean up hash fragment left by OAuth redirect
+        if (window.location.hash && !window.location.hash.includes('/')) {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
       }
     };
 
