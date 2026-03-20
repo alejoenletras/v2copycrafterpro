@@ -34,62 +34,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('user_profiles' as any)
         .select('*')
         .eq('id', userId)
         .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        setProfile(null);
-      } else {
-        setProfile(data as unknown as UserProfile);
-      }
-    } catch (e) {
-      console.error('Profile fetch exception:', e);
+      setProfile((data as any) ?? null);
+    } catch {
       setProfile(null);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (user) {
-      await fetchProfile(user.id);
-    }
+    if (user) await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
+  // Initialize auth state
   useEffect(() => {
-    // Safety timeout — never stay loading forever
-    const timeout = setTimeout(() => setLoading(false), 5000);
+    let mounted = true;
 
-    // Listen for auth changes (handles initial session + OAuth redirects + refreshes)
+    const init = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        if (session?.user) {
+          setUser(session.user);
+          await fetchProfile(session.user.id);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    init();
+
+    // Listen for future auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        clearTimeout(timeout);
+      async (_event, session) => {
+        if (!mounted) return;
         const currentUser = session?.user ?? null;
         setUser(currentUser);
         if (currentUser) {
           await fetchProfile(currentUser.id);
         } else {
           setProfile(null);
-          setLoading(false);
         }
+        setLoading(false);
       }
     );
 
-    // Also check initial session for page refreshes
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        clearTimeout(timeout);
-        setLoading(false);
-      }
-      // If session exists, onAuthStateChange will handle it
-    });
-
     return () => {
-      clearTimeout(timeout);
+      mounted = false;
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
@@ -109,18 +107,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
   };
 
-  const isAdmin = profile?.role === 'admin';
-  const isApproved = profile?.status === 'approved';
-
   return (
     <AuthContext.Provider
-      value={{ user, profile, loading, isAdmin, isApproved, signIn, signUp, signOut, refreshProfile }}
+      value={{
+        user,
+        profile,
+        loading,
+        isAdmin: profile?.role === 'admin',
+        isApproved: profile?.status === 'approved',
+        signIn,
+        signUp,
+        signOut,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -129,8 +133,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 }
