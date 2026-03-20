@@ -200,7 +200,12 @@ export default function SurveyAnalysisPage() {
       if (data.error) throw new Error(data.error);
       if (!data.analysis) throw new Error(`Respuesta inesperada: ${JSON.stringify(data).slice(0, 200)}`);
 
-      setAnalysis(data.analysis);
+      // Ensure audience_dna is an object, not a string
+      const result = data.analysis;
+      if (result.audience_dna && typeof result.audience_dna === 'string') {
+        try { result.audience_dna = JSON.parse(result.audience_dna); } catch { /* keep as-is */ }
+      }
+      setAnalysis(result);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast({ title: 'Error al analizar', description: msg, variant: 'destructive' });
@@ -213,11 +218,16 @@ export default function SurveyAnalysisPage() {
     if (!analysis?.audience_dna) return;
     setSavingDna(true);
     try {
+      // Ensure data is a proper object, not a stringified JSON
+      let dnaData = analysis.audience_dna;
+      if (typeof dnaData === 'string') {
+        try { dnaData = JSON.parse(dnaData); } catch { /* keep as-is */ }
+      }
       const { error } = await supabase.from('dnas').insert({
         user_id: 'default-user',
         type: 'audience',
         name: `Audiencia — ${fileName.replace('.csv', '')}`,
-        data: analysis.audience_dna,
+        data: dnaData,
       });
       if (error) throw new Error(error.message);
       setDnaSaved(true);
