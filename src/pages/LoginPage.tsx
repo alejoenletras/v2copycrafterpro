@@ -310,27 +310,6 @@ export default function LoginPage() {
                 {/* ── REGISTER TAB ── */}
                 {tab === 'register' && (
                   <div className="space-y-5 animate-in fade-in duration-200">
-                    {/* Google */}
-                    <button
-                      onClick={handleGoogle}
-                      disabled={googleLoading}
-                      className="w-full flex items-center justify-center py-3 px-4 rounded-xl bg-white text-zinc-800 font-medium text-sm hover:bg-zinc-100 transition-colors disabled:opacity-60"
-                    >
-                      {googleLoading ? (
-                        <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-                      ) : (
-                        <GoogleIcon />
-                      )}
-                      Registrarse con Google
-                    </button>
-
-                    {/* Divider */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-px bg-zinc-800" />
-                      <span className="text-xs text-zinc-500 uppercase tracking-wider">o regístrate con email</span>
-                      <div className="flex-1 h-px bg-zinc-800" />
-                    </div>
-
                     {/* Register form */}
                     <form onSubmit={handleRegister} className="space-y-4">
                       <div className="space-y-2">
