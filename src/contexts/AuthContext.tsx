@@ -53,23 +53,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!mounted) return;
+    // Hard timeout — NEVER spinner more than 3 seconds
+    const hardTimeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 3000);
 
-        if (session?.user) {
-          setUser(session.user);
-          await fetchProfile(session.user.id);
-        }
-      } catch {
-        // ignore
-      } finally {
-        if (mounted) setLoading(false);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUser(session.user);
+        // Fetch profile in background — don't block loading
+        fetchProfile(session.user.id).catch(() => {});
       }
-    };
-
-    init();
+      setLoading(false);
+      clearTimeout(hardTimeout);
+    }).catch(() => {
+      if (mounted) setLoading(false);
+      clearTimeout(hardTimeout);
+    });
 
     // Listen for future auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
