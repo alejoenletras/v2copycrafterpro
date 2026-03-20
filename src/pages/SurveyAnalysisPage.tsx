@@ -132,7 +132,7 @@ export default function SurveyAnalysisPage() {
     setHistoryLoading(true);
     try {
       const { data, error } = await supabase
-        .from('survey_analyses')
+        .from('survey_analyses' as any)
         .select('id, file_name, total_rows, context, document, status, created_at')
         .order('created_at', { ascending: false })
         .limit(20);
@@ -150,7 +150,7 @@ export default function SurveyAnalysisPage() {
   // ─── Save analysis to Supabase ────────────────────────────────────────────
   const saveAnalysis = async (doc: string) => {
     try {
-      const { error } = await supabase.from('survey_analyses').insert({
+      const { error } = await supabase.from('survey_analyses' as any).insert({
         user_id: userId,
         file_name: fileName,
         total_rows: totalRows,
@@ -169,7 +169,7 @@ export default function SurveyAnalysisPage() {
   const deleteAnalysis = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const { error } = await supabase.from('survey_analyses').delete().eq('id', id);
+      const { error } = await supabase.from('survey_analyses' as any).delete().eq('id', id);
       if (error) throw error;
       setHistory(prev => prev.filter(r => r.id !== id));
       if (viewingRecord?.id === id) {

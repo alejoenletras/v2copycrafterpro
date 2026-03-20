@@ -266,7 +266,7 @@ export default function VslMakerPage() {
   const fetchProjects = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from('vsl_projects')
+        .from('vsl_projects' as any)
         .select('*')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
@@ -316,14 +316,14 @@ export default function VslMakerPage() {
       if (projectId) {
         // Update existing
         const { error } = await supabase
-          .from('vsl_projects')
+          .from('vsl_projects' as any)
           .update(row)
           .eq('id', projectId);
         if (error) throw error;
       } else {
         // Insert new
         const { data, error } = await supabase
-          .from('vsl_projects')
+          .from('vsl_projects' as any)
           .insert(row)
           .select('id')
           .single();
@@ -362,7 +362,7 @@ export default function VslMakerPage() {
     e.stopPropagation();
     try {
       const { error } = await supabase
-        .from('vsl_projects')
+        .from('vsl_projects' as any)
         .delete()
         .eq('id', projectId);
       if (error) throw error;

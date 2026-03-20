@@ -101,7 +101,7 @@ export default function BrandChatPage() {
     setLoadingConversations(true);
     try {
       const { data, error } = await supabase
-        .from('chat_conversations')
+        .from('chat_conversations' as any)
         .select('*')
         .order('updated_at', { ascending: false });
       if (error) throw error;
@@ -126,7 +126,7 @@ export default function BrandChatPage() {
   const loadConversation = async (convId: string) => {
     try {
       const { data, error } = await supabase
-        .from('chat_messages')
+        .from('chat_messages' as any)
         .select('role, content, attachments')
         .eq('conversation_id', convId)
         .order('message_order', { ascending: true });
@@ -168,8 +168,8 @@ export default function BrandChatPage() {
     e.stopPropagation();
     try {
       // Delete messages first (FK constraint)
-      await supabase.from('chat_messages').delete().eq('conversation_id', convId);
-      await supabase.from('chat_conversations').delete().eq('id', convId);
+      await supabase.from('chat_messages' as any).delete().eq('conversation_id', convId);
+      await supabase.from('chat_conversations' as any).delete().eq('id', convId);
 
       setConversations((prev) => prev.filter((c) => c.id !== convId));
 
@@ -214,11 +214,11 @@ export default function BrandChatPage() {
         },
       ];
 
-      await supabase.from('chat_messages').insert(rows);
+      await supabase.from('chat_messages' as any).insert(rows);
 
       // Update conversation updated_at
       await supabase
-        .from('chat_conversations')
+        .from('chat_conversations' as any)
         .update({ updated_at: new Date().toISOString() })
         .eq('id', convId);
     } catch (err: any) {
@@ -303,7 +303,7 @@ export default function BrandChatPage() {
         // Create new conversation
         const title = (trimmed || '(archivo adjunto)').slice(0, 50);
         const { data: convData, error: convError } = await supabase
-          .from('chat_conversations')
+          .from('chat_conversations' as any)
           .insert({ title, user_id: 'default' })
           .select('*')
           .single();
