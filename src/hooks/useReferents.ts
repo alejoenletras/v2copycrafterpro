@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { ReferentPlatform } from '@/types';
 
 export function useReferents() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const { data: referents, isLoading, error } = useQuery({
     queryKey: ['referents'],
@@ -31,7 +33,7 @@ export function useReferents() {
     }) => {
       const { data, error } = await supabase
         .from('referent_profiles')
-        .insert({ user_id: 'default-user', ...ref })
+        .insert({ user_id: userId, ...ref })
         .select()
         .single();
 

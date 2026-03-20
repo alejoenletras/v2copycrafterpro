@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { ReferenceCategory } from '@/types';
 
 export function useReferences(category?: ReferenceCategory) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const { data: references, isLoading, error } = useQuery({
     queryKey: category ? ['references', category] : ['references'],
@@ -38,7 +40,7 @@ export function useReferences(category?: ReferenceCategory) {
       const { data, error } = await supabase
         .from('reference_scripts')
         .insert({
-          user_id: 'default-user',
+          user_id: userId,
           ...ref,
           tags: ref.tags || [],
         })

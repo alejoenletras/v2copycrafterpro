@@ -1,11 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { DNAType } from '@/types';
 
 export function useDNAs(type?: DNAType) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const { data: dnas, isLoading, error } = useQuery({
     queryKey: type ? ['dnas', type] : ['dnas'],
@@ -30,7 +32,7 @@ export function useDNAs(type?: DNAType) {
       const { data, error } = await supabase
         .from('dnas')
         .insert({
-          user_id: 'default-user',
+          user_id: userId,
           type: dna.type,
           name: dna.name,
           data: dna.data,
@@ -96,7 +98,7 @@ export function useDNAs(type?: DNAType) {
         .from('dnas')
         .update({ is_default: false })
         .eq('type', dnaType)
-        .eq('user_id', 'default-user');
+        .eq('user_id', userId);
 
       // Set new default
       const { data, error } = await supabase
@@ -143,7 +145,7 @@ export function useDNAs(type?: DNAType) {
       const { data, error } = await supabase
         .from('dnas')
         .insert({
-          user_id: 'default-user',
+          user_id: userId,
           type: source.type,
           name: `${source.name} (copia)`,
           data: source.data,

@@ -1,11 +1,13 @@
 import { useMutation } from '@tanstack/react-query';
 import { SUPABASE_KEY } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 
 const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 
 export function useTrainingPatterns() {
   const { toast } = useToast();
+  const userId = useUserId();
 
   const condensePatterns = useMutation({
     mutationFn: async (params: { dna_expert_id?: string }) => {
@@ -16,7 +18,7 @@ export function useTrainingPatterns() {
           Authorization: `Bearer ${SUPABASE_KEY}`,
         },
         body: JSON.stringify({
-          user_id: 'default-user',
+          user_id: userId,
           dna_expert_id: params.dna_expert_id || undefined,
         }),
       });

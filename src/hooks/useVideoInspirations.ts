@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import { callEdge } from '@/lib/callEdge';
 import type { VideoInspiration } from '@/types';
 
 export function useVideoInspirations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   // Query: list all video inspirations
   const { data: inspirations, isLoading, error } = useQuery({
@@ -38,7 +40,7 @@ export function useVideoInspirations() {
     }) => {
       const { data, error } = await supabase
         .from('video_inspirations')
-        .insert({ user_id: 'default-user', ...params })
+        .insert({ user_id: userId, ...params })
         .select()
         .single();
       if (error) throw error;

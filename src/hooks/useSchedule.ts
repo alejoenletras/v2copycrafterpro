@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserId } from '@/hooks/useUserId';
 
 export interface Schedule {
   id?: string;
@@ -22,15 +23,14 @@ export interface Schedule {
   last_run_status?: string;
 }
 
-const USER_ID = 'default-user';
-
 export function useSchedule() {
+  const userId = useUserId();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadSchedule();
-  }, []);
+  }, [userId]);
 
   async function loadSchedule() {
     setLoading(true);
@@ -38,7 +38,7 @@ export function useSchedule() {
       const { data, error } = await supabase
         .from('schedules' as any)
         .select('*')
-        .eq('user_id', USER_ID)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -59,7 +59,7 @@ export function useSchedule() {
   async function saveSchedule(scheduleData: Partial<Schedule>) {
     const payload = {
       ...scheduleData,
-      user_id: USER_ID,
+      user_id: userId,
       countries: JSON.stringify(scheduleData.countries),
       run_days: JSON.stringify(scheduleData.run_days),
     };

@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { CorrectionType } from '@/types';
 
 export function useCorrections() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const createCorrection = useMutation({
     mutationFn: async (correction: {
@@ -22,7 +24,7 @@ export function useCorrections() {
       const { data, error } = await supabase
         .from('script_corrections')
         .insert({
-          user_id: 'default-user',
+          user_id: userId,
           ...correction,
         })
         .select()

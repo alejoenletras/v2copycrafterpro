@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 
 export function useProjects() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   // Obtener todos los proyectos
   const { data: projects, isLoading, error } = useQuery({
@@ -29,7 +31,7 @@ export function useProjects() {
       const { data, error } = await supabase
         .from('projects')
         .insert({
-          user_id: 'default-user',
+          user_id: userId,
           funnel_type: project.funnelType || 'vsl',
           country: project.country || 'colombia',
           expert_profile: project.expertProfile || {},

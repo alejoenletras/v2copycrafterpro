@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import {
   Layers, BookOpen, Search, Video, Users, Sparkles, Film,
   FileText, Activity, Zap, Menu, X, BarChart2, MessageSquare,
+  Shield, LogOut,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
@@ -45,6 +47,7 @@ const NAV_GROUPS = [
 export default function Sidebar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { profile, isAdmin, signOut } = useAuth();
 
   const { data: draftCount = 0 } = useQuery({
     queryKey: ['scripts-draft-count'],
@@ -58,6 +61,19 @@ export default function Sidebar() {
     refetchInterval: 30000,
   });
 
+  // Build nav groups with optional admin section
+  const allGroups = isAdmin
+    ? [
+        ...NAV_GROUPS,
+        {
+          label: 'ADMIN',
+          items: [
+            { label: 'Usuarios', href: '/admin', icon: Shield },
+          ],
+        },
+      ]
+    : NAV_GROUPS;
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
@@ -68,7 +84,7 @@ export default function Sidebar() {
 
       {/* Nav groups */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
-        {NAV_GROUPS.map((group) => (
+        {allGroups.map((group) => (
           <div key={group.label}>
             <p className="px-2 mb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
               {group.label}
@@ -107,6 +123,27 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* User info + sign out */}
+      {profile && (
+        <div className="border-t border-border px-3 py-3 space-y-2">
+          <div className="truncate">
+            <p className="text-[13px] font-medium truncate">
+              {profile.full_name || 'Usuario'}
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {profile.email}
+            </p>
+          </div>
+          <button
+            onClick={signOut}
+            className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            Cerrar sesion
+          </button>
+        </div>
+      )}
     </div>
   );
 

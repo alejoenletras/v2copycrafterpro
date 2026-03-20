@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
 import DNAsPage from "./pages/DNAsPage";
 import VslMakerPage from "./pages/VslMakerPage";
@@ -15,9 +16,55 @@ import ReferentesPage from "./pages/ReferentesPage";
 import ModeledScriptsPage from "./pages/ModeledScriptsPage";
 import SurveyAnalysisPage from "./pages/SurveyAnalysisPage";
 import BrandChatPage from "./pages/BrandChatPage";
+import LoginPage from "./pages/LoginPage";
+import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
+
+/** Redirects to /login if not authenticated or not approved */
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, loading, isApproved } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // If logged in but not approved, LoginPage handles showing the status screen
+  if (!isApproved) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+/** Only accessible by admin users */
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/dnas" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -25,23 +72,40 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Navigate to="/dnas" replace />} />
-            <Route path="/dnas" element={<DNAsPage />} />
-            <Route path="/references" element={<ReferencesPage />} />
-            <Route path="/referentes" element={<ReferentesPage />} />
-            <Route path="/video-inspiration" element={<VideoInspirationPage />} />
-            <Route path="/competitors" element={<CompetitorsPage />} />
-            <Route path="/ads-agent" element={<AdsAgentPage />} />
-            <Route path="/vsl" element={<VslMakerPage />} />
-            <Route path="/scripts" element={<ModeledScriptsPage />} />
-            <Route path="/runs" element={<RunsPage />} />
-            <Route path="/surveys" element={<SurveyAnalysisPage />} />
-            <Route path="/brand-chat" element={<BrandChatPage />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<Navigate to="/dnas" replace />} />
+              <Route path="/dnas" element={<DNAsPage />} />
+              <Route path="/references" element={<ReferencesPage />} />
+              <Route path="/referentes" element={<ReferentesPage />} />
+              <Route path="/video-inspiration" element={<VideoInspirationPage />} />
+              <Route path="/competitors" element={<CompetitorsPage />} />
+              <Route path="/ads-agent" element={<AdsAgentPage />} />
+              <Route path="/vsl" element={<VslMakerPage />} />
+              <Route path="/scripts" element={<ModeledScriptsPage />} />
+              <Route path="/runs" element={<RunsPage />} />
+              <Route path="/surveys" element={<SurveyAnalysisPage />} />
+              <Route path="/brand-chat" element={<BrandChatPage />} />
+              <Route
+                path="/admin"
+                element={
+                  <AdminRoute>
+                    <AdminPage />
+                  </AdminRoute>
+                }
+              />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

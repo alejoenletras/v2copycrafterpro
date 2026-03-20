@@ -23,6 +23,7 @@ import {
   AutoAnalysis
 } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/getCurrentUserId';
 
 interface WizardState {
   currentStep: WizardStep;
@@ -265,8 +266,9 @@ export const useWizardStore = create<WizardState>((set, get) => ({
         ? (project.saleadsConfig?.targetCountry || 'multiple')
         : (project.country || 'colombia');
 
+      const currentUserId = await getCurrentUserId();
       const projectData = {
-        user_id: 'default-user',
+        user_id: currentUserId,
         funnel_type: effectiveFunnelType,
         vsl_type: project.funnelType === 'vsl' ? project.vslType : null,
         vsl_mode: project.vslMode || 'manual',

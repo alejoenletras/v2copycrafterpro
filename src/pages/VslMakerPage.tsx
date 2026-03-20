@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDNAs } from '@/hooks/useDNAs';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,38 @@ import {
   Home, Loader2, Mic, Users, Package, ChevronDown,
   Sparkles, Copy, Check, Link, X, Plus, Download, RotateCcw,
   AlertCircle, CheckCircle2, FileText, MessageCircle, Send, Zap, ListChecks,
+  Trash2, FolderOpen, Clock,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { useUserId } from '@/hooks/useUserId';
 import type { DNAType } from '@/types';
+
+// ─── Chat message type (moved up for VslProject reference) ────────────────
+
+interface ChatMessage {
+  role: 'ai' | 'user';
+  text: string;
+}
+
+// ─── VSL Project type ─────────────────────────────────────────────────────
+
+interface VslProject {
+  id: string;
+  user_id: string;
+  project_name: string;
+  expert_dna_id: string | null;
+  audience_dna_id: string | null;
+  product_dna_id: string | null;
+  instructions: string | null;
+  reference_url: string | null;
+  reference_text: string | null;
+  generated_sections: Record<string, string>;
+  chat_messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
 
 // ─── Edge function caller ───────────────────────────────────────────────────
 
@@ -170,11 +198,6 @@ function DnaSelector({ dnaType, config, allDnas, selected, onSelect }: DnaSelect
 
 // ─── Chat message component ─────────────────────────────────────────────────
 
-interface ChatMessage {
-  role: 'ai' | 'user';
-  text: string;
-}
-
 function ChatBubble({ msg }: { msg: ChatMessage }) {
   return (
     <div className={cn('flex gap-2', msg.role === 'user' && 'flex-row-reverse')}>
@@ -200,6 +223,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 export default function VslMakerPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const userId = useUserId();
   const { dnas, isLoading: dnasLoading } = useDNAs();
 
   // Shared state
@@ -231,6 +255,153 @@ export default function VslMakerPage() {
   const [isInfoComplete, setIsInfoComplete] = useState(false);
   const [generatingProgress, setGeneratingProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Project persistence state ────────────────────────────────────────────
+  const [projects, setProjects] = useState<VslProject[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [showProjects, setShowProjects] = useState(true);
+
+  // ── Fetch projects on mount ──────────────────────────────────────────────
+  const fetchProjects = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vsl_projects')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setProjects((data as VslProject[]) ?? []);
+    } catch (err: any) {
+      console.error('Error fetching VSL projects:', err.message);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  // ── Generate project name ────────────────────────────────────────────────
+  const generateProjectName = (instr: string) => {
+    if (instr.trim()) {
+      const clean = instr.trim().replace(/\n/g, ' ');
+      return clean.length > 40 ? clean.slice(0, 40) + '...' : clean;
+    }
+    const d = new Date();
+    return `VSL — ${d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  };
+
+  // ── Save / update project ───────────────────────────────────────────────
+  const saveProject = useCallback(async (
+    sections: Record<string, string>,
+    msgs: ChatMessage[],
+    projectId: string | null,
+  ) => {
+    const row = {
+      user_id: userId,
+      project_name: generateProjectName(instructions),
+      expert_dna_id: selectedDnas.expert?.id ?? null,
+      audience_dna_id: selectedDnas.audience?.id ?? null,
+      product_dna_id: selectedDnas.product?.id ?? null,
+      instructions: instructions || null,
+      reference_url: referenceUrl || null,
+      reference_text: referenceText || null,
+      generated_sections: sections,
+      chat_messages: msgs,
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      if (projectId) {
+        // Update existing
+        const { error } = await supabase
+          .from('vsl_projects')
+          .update(row)
+          .eq('id', projectId);
+        if (error) throw error;
+      } else {
+        // Insert new
+        const { data, error } = await supabase
+          .from('vsl_projects')
+          .insert(row)
+          .select('id')
+          .single();
+        if (error) throw error;
+        if (data) setActiveProjectId(data.id);
+      }
+      fetchProjects();
+    } catch (err: any) {
+      console.error('Error saving VSL project:', err.message);
+    }
+  }, [instructions, selectedDnas, referenceUrl, referenceText, fetchProjects]);
+
+  // ── Load a project ──────────────────────────────────────────────────────
+  const loadProject = (project: VslProject) => {
+    setActiveProjectId(project.id);
+    setInstructions(project.instructions || '');
+    setReferenceUrl(project.reference_url || '');
+    setReferenceText(project.reference_text || '');
+    setShowLinkInput(!!(project.reference_url || project.reference_text));
+    setGeneratedSections(project.generated_sections || {});
+    setChatMessages(project.chat_messages || []);
+    setIsInfoComplete(false);
+
+    // Restore DNA selections
+    if (dnas && dnas.length > 0) {
+      setSelectedDnas({
+        expert: dnas.find(d => d.id === project.expert_dna_id) ?? null,
+        audience: dnas.find(d => d.id === project.audience_dna_id) ?? null,
+        product: dnas.find(d => d.id === project.product_dna_id) ?? null,
+      });
+    }
+  };
+
+  // ── Delete a project ────────────────────────────────────────────────────
+  const deleteProject = async (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { error } = await supabase
+        .from('vsl_projects')
+        .delete()
+        .eq('id', projectId);
+      if (error) throw error;
+      if (activeProjectId === projectId) {
+        setActiveProjectId(null);
+        setGeneratedSections({});
+        setChatMessages([]);
+        setInstructions('');
+        setReferenceUrl('');
+        setReferenceText('');
+        setShowLinkInput(false);
+      }
+      fetchProjects();
+      toast({ title: 'Proyecto eliminado' });
+    } catch (err: any) {
+      toast({ title: 'Error al eliminar', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  // ── New project ─────────────────────────────────────────────────────────
+  const startNewProject = () => {
+    setActiveProjectId(null);
+    setGeneratedSections({});
+    setChatMessages([]);
+    setInstructions('');
+    setReferenceUrl('');
+    setReferenceText('');
+    setShowLinkInput(false);
+    setIsInfoComplete(false);
+    setChatInput('');
+    // Re-select default DNAs
+    if (dnas && dnas.length > 0) {
+      const next: Record<DNAType, any | null> = { expert: null, audience: null, product: null };
+      for (const type of ['expert', 'audience', 'product'] as DNAType[]) {
+        next[type] = dnas.find(d => d.type === type && d.is_default) || dnas.find(d => d.type === type) || null;
+      }
+      setSelectedDnas(next);
+    }
+  };
 
   // Pre-select default DNAs
   useEffect(() => {
@@ -328,13 +499,16 @@ export default function VslMakerPage() {
       });
 
       if (result.success && result.content) {
-        setGeneratedSections(prev => ({ ...prev, [currentSection.id]: result.content }));
+        const updatedSections = { ...generatedSections, [currentSection.id]: result.content };
+        setGeneratedSections(updatedSections);
         if (currentSectionIndex < VSL_SECTIONS.length - 1) {
           setSelectedSection(VSL_SECTIONS[currentSectionIndex + 1].id);
         }
         setTimeout(() => {
           documentRef.current?.scrollTo({ top: documentRef.current!.scrollHeight, behavior: 'smooth' });
         }, 100);
+        // Auto-save project
+        saveProject(updatedSections, chatMessages, activeProjectId);
       } else {
         throw new Error(result.error || 'Error al generar la sección');
       }
@@ -448,6 +622,8 @@ export default function VslMakerPage() {
 
     setGeneratingProgress(null);
     toast({ title: 'VSL completo generado', description: 'Las 12 secciones han sido creadas. Revisa el documento.' });
+    // Auto-save after full generation
+    saveProject(newSections, chatMessages, activeProjectId);
   };
 
   // ── Copy helpers ──────────────────────────────────────────────────────────
@@ -545,6 +721,73 @@ export default function VslMakerPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* ── Project History ──────────────────────────── */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setShowProjects(!showProjects)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
+                >
+                  <FolderOpen className="w-3 h-3" />
+                  Proyectos VSL
+                  <ChevronDown className={cn('w-3 h-3 transition-transform', !showProjects && '-rotate-90')} />
+                </button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={startNewProject}
+                  className="h-6 px-2 text-xs gap-1 text-violet-600 hover:text-violet-700"
+                >
+                  <Plus className="w-3 h-3" /> Nuevo
+                </Button>
+              </div>
+
+              {showProjects && (
+                <div className="space-y-1.5">
+                  {isLoadingProjects ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Cargando proyectos...
+                    </div>
+                  ) : projects.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic py-1">Sin proyectos guardados</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {projects.map(p => {
+                        const sCount = Object.keys(p.generated_sections || {}).length;
+                        const isActive = activeProjectId === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => loadProject(p)}
+                            className={cn(
+                              'group/card relative flex flex-col items-start gap-0.5 px-2.5 py-1.5 rounded-lg border text-left text-xs transition-colors max-w-[200px]',
+                              isActive
+                                ? 'border-violet-300 bg-violet-50 text-violet-700'
+                                : 'border-border hover:border-violet-200 hover:bg-muted/50',
+                            )}
+                          >
+                            <span className="font-medium truncate w-full pr-4">{p.project_name}</span>
+                            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                              <Clock className="w-2.5 h-2.5" />
+                              {new Date(p.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                              <span className="text-violet-500 font-medium">{sCount}/12</span>
+                            </span>
+                            <button
+                              onClick={(e) => deleteProject(p.id, e)}
+                              className="absolute top-1 right-1 p-0.5 rounded opacity-0 group-hover/card:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                              title="Eliminar proyecto"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* DNA Selection (shared) */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
