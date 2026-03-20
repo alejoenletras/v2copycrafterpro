@@ -61,47 +61,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfile]);
 
   useEffect(() => {
-    // Normalize domain: redirect www to non-www for consistent auth
-    if (typeof window !== 'undefined' && window.location.hostname === 'www.hooq.online') {
-      window.location.href = window.location.href.replace('www.hooq.online', 'hooq.online');
-      return;
-    }
-
     // Safety timeout — never stay loading forever
     const timeout = setTimeout(() => setLoading(false), 5000);
 
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) {
-        fetchProfile(currentUser.id).finally(() => {
-          clearTimeout(timeout);
-          setLoading(false);
-        });
-      } else {
-        clearTimeout(timeout);
-        setLoading(false);
-      }
-    }).catch(() => {
-      clearTimeout(timeout);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
+    // Listen for auth changes (handles initial session + OAuth redirects + refreshes)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        clearTimeout(timeout);
         const currentUser = session?.user ?? null;
         setUser(currentUser);
         if (currentUser) {
           await fetchProfile(currentUser.id);
         } else {
           setProfile(null);
+          setLoading(false);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Also check initial session for page refreshes
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        clearTimeout(timeout);
+        setLoading(false);
+      }
+      // If session exists, onAuthStateChange will handle it
+    });
+
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
   const signIn = async (email: string, password: string) => {
