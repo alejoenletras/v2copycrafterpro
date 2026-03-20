@@ -80,10 +80,37 @@ const analysisToolSchema = {
       audience_dna: {
         type: 'object' as const,
         properties: {
-          ideal_client: { type: 'string' as const, description: 'Quién es el cliente ideal: edad, situación, experiencia, basado en datos reales' },
-          core_belief: { type: 'string' as const, description: 'Creencias, miedos y motivaciones usando vocabulario real de las respuestas' },
-          testimonials: { type: 'string' as const, description: 'Transformaciones que busca la audiencia, de dónde a dónde quieren ir' },
-          keywords: { type: 'string' as const, description: 'Palabras y frases exactas que usa la audiencia, copiadas de sus respuestas' },
+          ideal_client: { type: 'string' as const, description: `Perfil ULTRA detallado del cliente ideal basado en datos reales de la encuesta. Incluye TODO esto en un solo texto largo y rico:
+- DATOS DEMOGRÁFICOS: Nombre representativo, edad, breve descripción de quién es y su situación actual, mercado objetivo, avatar representativo
+- PROBLEMA PRINCIPAL: El problema central que enfrentan (con carga emocional), problemas secundarios (mínimo 4), 5 emociones viscerales que sienten
+- 5 MAYORES MIEDOS: Incluir el miedo principal y 4 miedos secundarios, todos específicos y viscerales
+- DESEOS SECRETOS MÁS PROFUNDOS: Lo que realmente quieren en el fondo (mínimo 3)
+- CÓMO AFECTAN SUS MIEDOS SUS RELACIONES: Con pareja, hijos, amigos, padres, consigo mismo
+- 5 FRASES OFENSIVAS que personas cercanas les dicen (conversacionales pero dolorosas)
+Usa datos REALES de la encuesta. Cita respuestas textualmente cuando sea posible.` },
+          core_belief: { type: 'string' as const, description: `Creencias, objeciones y framework persuasivo. Incluye TODO esto:
+- CREENCIA PRINCIPAL que los frena (la que deben romper para comprar)
+- Por qué está EQUIVOCADA con argumentación completa
+- 4 CREENCIAS SECUNDARIAS con su refutación (cada una: la creencia, por qué está mal, la visión correcta)
+- OBJECIONES DEL MERCADO: 5 objeciones principales, objeciones prácticas (barreras de recursos), objeciones emocionales (resistencias internas)
+- FRAMEWORK EJACA: Cómo podemos (1) Encorajar sus sueños, (2) Justificar sus errores, (3) Aliviar sus miedos, (4) Confirmar sus sospechas, (5) Apuntar la culpa a sus enemigos — con frases concretas para cada uno
+Basa todo en el vocabulario real de las respuestas de la encuesta.` },
+          testimonials: { type: 'string' as const, description: `Transformación completa y prueba social. Incluye TODO esto:
+- TRANSFORMACIÓN PRIMARIA: Si un genio pudiera darles la solución perfecta, cómo sería su vida
+- CÓMO AFECTARÍA SUS RELACIONES: El cambio en pareja, hijos, amigos, familia
+- IDENTIDAD TRANSFORMADA: Quién quieren SER o cómo quieren ser VISTOS
+- FUTURO PRESUMIDO DE ÉXITO: Descripción concreta del futuro que imaginan
+- BENEFICIOS PRÁCTICOS: 5 resultados tangibles y medibles
+- BENEFICIOS EMOCIONALES: 5 sentimientos y estados internos deseados (certeza, alivio, confianza, claridad, paz)
+- QUÉ HAN INTENTADO ANTES: 3-5 soluciones que probaron y fallaron, y por qué fallaron
+- SOLUCIONES QUE NO QUIEREN: Qué están hartos de intentar
+Extrae de las respuestas reales de la encuesta.` },
+          keywords: { type: 'string' as const, description: `Vocabulario COMPLETO de la audiencia extraído de las respuestas reales. Incluye:
+- PALABRAS PODEROSAS: Mínimo 10 palabras individuales que la audiencia usa con frecuencia (esgotado, paralisado, incerteza, etc.)
+- FRASES PODEROSAS: Mínimo 8 frases textuales que la audiencia dice naturalmente en sus respuestas
+- EN QUÉ BASAN SU ÉXITO: Cómo mide esta audiencia si algo funciona o no
+- KEYWORDS DE MARKETING: 5-10 keywords de posicionamiento relevantes para esta audiencia
+Todo debe ser TEXTUAL de las respuestas de la encuesta, no inventado.` },
         },
         required: ['ideal_client', 'core_belief', 'testimonials', 'keywords'],
       },
@@ -131,7 +158,15 @@ ${JSON.stringify(quantColumns, null, 2)}
 DATOS CUALITATIVOS (muestra):
 ${JSON.stringify(qualColumns, null, 2)}
 
-IMPORTANTE: El campo audience_dna es OBLIGATORIO. Genera un perfil de audiencia completo basado en los datos reales.
+IMPORTANTE — audience_dna es el campo MÁS CRÍTICO de todo el análisis:
+- Cada campo de audience_dna debe ser un texto LARGO y ULTRA DETALLADO (mínimo 300 palabras por campo)
+- Usa datos REALES y citas TEXTUALES de las respuestas de la encuesta
+- Sigue las instrucciones de cada campo al pie de la letra — incluye TODOS los sub-elementos listados
+- El ideal_client debe incluir: datos demográficos, problema principal, problemas secundarios, emociones, miedos, deseos secretos, impacto en relaciones, frases ofensivas que les dicen
+- El core_belief debe incluir: creencia principal + refutación, 4 creencias secundarias, objeciones, framework EJACA completo
+- El testimonials debe incluir: transformación primaria, identidad transformada, beneficios prácticos y emocionales, qué han intentado antes
+- El keywords debe incluir: palabras poderosas, frases textuales, métricas de éxito, keywords de marketing
+
 Limita a máximo 4 items en quantitative, 4 en qualitative_themes, 5 en insights, 3 en ad_angles.`;
 
     console.log('analyze-survey: calling Claude Sonnet, totalResponses:', totalResponses);
@@ -145,7 +180,7 @@ Limita a máximo 4 items en quantitative, 4 en qualitative_themes, 5 en insights
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 8000,
+        max_tokens: 16000,
         tools: [analysisToolSchema],
         tool_choice: { type: 'tool', name: 'deliver_survey_analysis' },
         messages: [{ role: 'user', content: userPrompt }],
