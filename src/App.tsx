@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
+import HomePage from "./pages/HomePage";
 import DNAsPage from "./pages/DNAsPage";
 import VslMakerPage from "./pages/VslMakerPage";
 import AdsAgentPage from "./pages/AdsAgentPage";
@@ -77,7 +78,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route path="/" element={<Navigate to="/dnas" replace />} />
+              <Route path="/" element={<HomePage />} />
               <Route path="/dnas" element={<DNAsPage />} />
               <Route path="/references" element={<ReferencesPage />} />
               <Route path="/referentes" element={<ReferentesPage />} />

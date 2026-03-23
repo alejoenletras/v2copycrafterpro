@@ -504,38 +504,72 @@ function MotorModeladoTab() {
 }
 
 // ─── Buscar Ads Tab (existing functionality) ──────────────────
+const PLATFORM_LABELS: Record<string, { label: string; color: string }> = {
+  facebook:      { label: 'FB Ads',   color: 'bg-blue-100 text-blue-700' },
+  instagram_ads: { label: 'IG Ads',   color: 'bg-pink-100 text-pink-700' },
+  tiktok:        { label: 'TikTok',   color: 'bg-slate-100 text-slate-700' },
+  ig_organic:    { label: 'IG Org.',  color: 'bg-rose-100 text-rose-700' },
+};
+
 function AdsTable({ ads }: { ads: Ad[] }) {
   return (
     <div className="border border-border rounded-xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-muted/50 border-b border-border">
-            <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Pagina</th>
+            <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Plataforma</th>
+            <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Pagina / Autor</th>
             <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Tipo</th>
-            <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Dias activo</th>
-            <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Collation</th>
+            <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Metrica</th>
+            <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs max-w-[160px]">Texto</th>
             <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs">Link</th>
           </tr>
         </thead>
         <tbody>
           {ads.map(ad => {
-            const collation = (ad.raw_data as Record<string, unknown>)?.collationCount;
-            const adLibUrl = `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.ad_archive_id}`;
+            const raw = (ad.raw_data || {}) as Record<string, unknown>;
+            const platform = (raw._platform as string) || 'facebook';
+            const views = raw._views as number | undefined;
+            const adLink = (raw._adLink as string) || (platform === 'facebook' || platform === 'instagram_ads'
+              ? `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&id=${ad.ad_archive_id}`
+              : '');
+            const quality = raw._quality as string | undefined;
+            const isOrganic = platform === 'tiktok' || platform === 'ig_organic';
+            const pfCfg = PLATFORM_LABELS[platform] || { label: platform, color: 'bg-gray-100 text-gray-700' };
+            const caption = ad.original_ad_copy?.slice(0, 80) || '';
+
             return (
               <tr key={ad.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3"><span className="font-medium text-sm">{ad.page_name}</span></td>
+                <td className="px-4 py-3">
+                  <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', pfCfg.color)}>{pfCfg.label}</span>
+                  {quality === 'high' && <span className="ml-1 text-xs text-emerald-600 font-medium">★</span>}
+                </td>
+                <td className="px-4 py-3 max-w-[140px]">
+                  <span className="font-medium text-sm truncate block">{ad.page_name || '-'}</span>
+                </td>
                 <td className="px-4 py-3"><Badge variant="outline" className="text-xs">{ad.ad_type}</Badge></td>
                 <td className="px-4 py-3 text-center">
-                  <span className={cn('font-semibold text-sm',
-                    ad.days_active >= 30 ? 'text-emerald-600' : ad.days_active >= 7 ? 'text-amber-600' : 'text-muted-foreground')}>
-                    {ad.days_active}d
-                  </span>
+                  {isOrganic && views != null ? (
+                    <span className={cn('font-semibold text-sm',
+                      views >= 1000000 ? 'text-emerald-600' : views >= 500000 ? 'text-amber-600' : 'text-muted-foreground')}>
+                      {views >= 1000000 ? `${(views / 1000000).toFixed(1)}M` : views >= 1000 ? `${Math.round(views / 1000)}K` : views}
+                    </span>
+                  ) : (
+                    <span className={cn('font-semibold text-sm',
+                      ad.days_active >= 30 ? 'text-emerald-600' : ad.days_active >= 7 ? 'text-amber-600' : 'text-muted-foreground')}>
+                      {ad.days_active}d
+                    </span>
+                  )}
                 </td>
-                <td className="px-4 py-3 text-center"><span className="text-sm text-muted-foreground">{collation != null ? String(collation) : '-'}</span></td>
+                <td className="px-4 py-3 max-w-[160px]">
+                  <span className="text-xs text-muted-foreground truncate block">{caption || '-'}</span>
+                </td>
                 <td className="px-4 py-3 text-center">
-                  <a href={adLibUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium">
-                    <ExternalLink className="w-3.5 h-3.5" /> Ver
-                  </a>
+                  {adLink ? (
+                    <a href={adLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium">
+                      <ExternalLink className="w-3.5 h-3.5" /> Ver
+                    </a>
+                  ) : <span className="text-xs text-muted-foreground">-</span>}
                 </td>
               </tr>
             );

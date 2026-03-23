@@ -15,6 +15,7 @@ export function useDNAs(type?: DNAType) {
       let query = supabase
         .from('dnas')
         .select('*')
+        .eq('user_id', userId)
         .order('updated_at', { ascending: false });
 
       if (type) {

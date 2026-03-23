@@ -134,6 +134,7 @@ export default function SurveyAnalysisPage() {
       const { data, error } = await supabase
         .from('survey_analyses' as any)
         .select('id, file_name, total_rows, context, document, status, created_at')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;

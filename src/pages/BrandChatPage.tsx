@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 import { Send, Copy, Check, MessageSquare, Loader2, Paperclip, X, FileText, Image as ImageIcon, Plus, Trash2, PanelLeftClose, PanelLeft, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 
 interface Attachment {
   name: string;
@@ -65,6 +66,7 @@ function formatDate(dateStr: string): string {
 
 export default function BrandChatPage() {
   const { toast } = useToast();
+  const userId = useUserId();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: WELCOME_MESSAGE },
   ]);
@@ -103,6 +105,7 @@ export default function BrandChatPage() {
       const { data, error } = await supabase
         .from('chat_conversations' as any)
         .select('*')
+        .eq('user_id', userId)
         .order('updated_at', { ascending: false });
       if (error) throw error;
       setConversations(data || []);
@@ -304,7 +307,7 @@ export default function BrandChatPage() {
         const title = (trimmed || '(archivo adjunto)').slice(0, 50);
         const { data: convData, error: convError } = await supabase
           .from('chat_conversations' as any)
-          .insert({ title, user_id: 'default' })
+          .insert({ title, user_id: userId })
           .select('*')
           .single();
 
