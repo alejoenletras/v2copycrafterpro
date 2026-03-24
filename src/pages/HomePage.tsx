@@ -139,10 +139,13 @@ export default function HomePage() {
 
   /* --- Fetch stats --- */
   useEffect(() => {
-    if (!userId || userId === "default-user") return;
-
     async function fetchStats() {
       setLoadingStats(true);
+      if (!userId || userId === "default-user") {
+        setStats({ dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
+        setLoadingStats(false);
+        return;
+      }
       try {
         const [dnasRes, convsRes, surveysRes, vslRes] = await Promise.all([
           supabase.from("dnas" as any).select("id").eq("user_id", userId),
@@ -165,14 +168,29 @@ export default function HomePage() {
     }
 
     fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // Hard timeout for stats - never skeleton more than 2s
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (loadingStats) {
+        setStats(s => s ?? { dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
+        setLoadingStats(false);
+      }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [loadingStats]);
 
   /* --- Fetch recent activity --- */
   useEffect(() => {
-    if (!userId || userId === "default-user") return;
-
     async function fetchActivity() {
       setLoadingActivity(true);
+      if (!userId || userId === "default-user") {
+        setActivity([]);
+        setLoadingActivity(false);
+        return;
+      }
       try {
         const [chatsRes, surveysRes, vslRes] = await Promise.all([
           supabase
@@ -240,7 +258,19 @@ export default function HomePage() {
     }
 
     fetchActivity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // Hard timeout for activity
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (loadingActivity) {
+        setActivity([]);
+        setLoadingActivity(false);
+      }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [loadingActivity]);
 
   /* --- Helpers --- */
   function relativeDate(d: Date): string {

@@ -47,7 +47,11 @@ const NAV_GROUPS = [
 export default function Sidebar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { profile, isAdmin, signOut } = useAuth();
+  const { user, profile, isAdmin: profileIsAdmin, signOut } = useAuth();
+
+  // Fallback: check admin by email if profile fetch fails
+  const ADMIN_EMAILS = ['alejoenletras@gmail.com'];
+  const isAdmin = profileIsAdmin || (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
 
   const { data: draftCount = 0 } = useQuery({
     queryKey: ['scripts-draft-count'],
