@@ -10,7 +10,7 @@ export function useDNAs(type?: DNAType) {
   const userId = useUserId();
 
   const { data: dnas, isLoading, error } = useQuery({
-    queryKey: type ? ['dnas', type] : ['dnas'],
+    queryKey: type ? ['dnas', type, userId] : ['dnas', userId],
     queryFn: async () => {
       let query = supabase
         .from('dnas')
