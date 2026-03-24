@@ -145,29 +145,17 @@ export default function HomePage() {
       setLoadingStats(true);
       try {
         const [dnasRes, convsRes, surveysRes, vslRes] = await Promise.all([
-          supabase
-            .from("dnas" as any)
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", userId),
-          supabase
-            .from("chat_conversations" as any)
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", userId),
-          supabase
-            .from("survey_analyses" as any)
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", userId),
-          supabase
-            .from("vsl_projects" as any)
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", userId),
+          supabase.from("dnas" as any).select("id").eq("user_id", userId),
+          supabase.from("chat_conversations" as any).select("id").eq("user_id", userId),
+          supabase.from("survey_analyses" as any).select("id").eq("user_id", userId),
+          supabase.from("vsl_projects" as any).select("id").eq("user_id", userId),
         ]);
 
         setStats({
-          dnas: (dnasRes as any).count ?? 0,
-          conversations: (convsRes as any).count ?? 0,
-          surveys: (surveysRes as any).count ?? 0,
-          vslProjects: (vslRes as any).count ?? 0,
+          dnas: dnasRes.data?.length ?? 0,
+          conversations: convsRes.data?.length ?? 0,
+          surveys: surveysRes.data?.length ?? 0,
+          vslProjects: vslRes.data?.length ?? 0,
         });
       } catch {
         setStats({ dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
@@ -195,13 +183,13 @@ export default function HomePage() {
             .limit(3),
           supabase
             .from("survey_analyses" as any)
-            .select("id, name, created_at")
+            .select("id, file_name, created_at")
             .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(3),
           supabase
             .from("vsl_projects" as any)
-            .select("id, name, updated_at")
+            .select("id, project_name, updated_at")
             .eq("user_id", userId)
             .order("updated_at", { ascending: false })
             .limit(2),
@@ -223,7 +211,7 @@ export default function HomePage() {
         ((surveysRes as any).data ?? []).forEach((s: any) => {
           items.push({
             id: s.id,
-            title: s.name || "Encuesta sin titulo",
+            title: s.file_name || "Encuesta sin titulo",
             type: "Encuesta",
             badge: "emerald",
             date: new Date(s.created_at),
@@ -234,7 +222,7 @@ export default function HomePage() {
         ((vslRes as any).data ?? []).forEach((v: any) => {
           items.push({
             id: v.id,
-            title: v.name || "Proyecto sin titulo",
+            title: v.project_name || "Proyecto sin titulo",
             type: "VSL",
             badge: "amber",
             date: new Date(v.updated_at),
@@ -308,13 +296,13 @@ export default function HomePage() {
       {/* ---- Top: Greeting ---- */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-foreground">
             Hola, {firstName}
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">{capitalizedDate}</p>
+          <p className="text-sm text-muted-foreground/70 mt-0.5">{capitalizedDate}</p>
         </div>
         <div className="flex-shrink-0 w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center">
-          <span className="text-sm font-semibold text-white">{initials}</span>
+          <span className="text-sm font-semibold text-foreground">{initials}</span>
         </div>
       </div>
 
@@ -323,7 +311,7 @@ export default function HomePage() {
         {statCards.map((stat) => (
           <div
             key={stat.label}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex items-start gap-3 transition-all duration-200"
+            className="bg-card border border-border rounded-xl p-5 flex items-start gap-3 transition-all duration-200"
           >
             <div className={`rounded-lg p-2 ${stat.bg}`}>
               <stat.icon className={`w-[18px] h-[18px] ${stat.color}`} />
@@ -332,11 +320,11 @@ export default function HomePage() {
               {loadingStats ? (
                 <div className="h-8 w-10 bg-zinc-800 rounded animate-pulse" />
               ) : (
-                <span className="text-3xl font-bold text-white leading-none block">
+                <span className="text-3xl font-bold text-foreground leading-none block">
                   {stat.value}
                 </span>
               )}
-              <span className="text-xs text-zinc-500 mt-1 block">
+              <span className="text-xs text-muted-foreground/70 mt-1 block">
                 {stat.label}
               </span>
             </div>
@@ -348,23 +336,23 @@ export default function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left Column — Herramientas (3/5) */}
         <div className="lg:col-span-3 space-y-3">
-          <h2 className="text-sm font-medium text-zinc-400 mb-1">
+          <h2 className="text-sm font-medium text-muted-foreground mb-1">
             Herramientas
           </h2>
           {featureCards.map((card) => (
             <NavLink
               key={card.to}
               to={card.to}
-              className="group flex items-center gap-4 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 transition-all duration-200 hover:border-violet-500/40 hover:bg-zinc-900 hover:scale-[1.01]"
+              className="group flex items-center gap-4 bg-card border border-border rounded-xl p-4 transition-all duration-200 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 hover:scale-[1.01]"
             >
               <div className="flex-shrink-0 rounded-lg bg-violet-500/10 p-3">
                 <card.icon className="w-5 h-5 text-violet-400" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-white">
+                <p className="text-sm font-semibold text-foreground">
                   {card.title}
                 </p>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {card.description}
                 </p>
               </div>
@@ -375,7 +363,7 @@ export default function HomePage() {
 
         {/* Right Column — Actividad reciente (2/5) */}
         <div className="lg:col-span-2 space-y-3">
-          <h2 className="text-sm font-medium text-zinc-400 mb-1">
+          <h2 className="text-sm font-medium text-muted-foreground mb-1">
             Actividad reciente
           </h2>
 
@@ -397,7 +385,7 @@ export default function HomePage() {
           ) : activity.length === 0 ? (
             <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-10 flex flex-col items-center justify-center text-center">
               <Activity className="w-8 h-8 text-zinc-700 mb-3" />
-              <p className="text-sm text-zinc-500">Sin actividad reciente</p>
+              <p className="text-sm text-muted-foreground/70">Sin actividad reciente</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -410,13 +398,13 @@ export default function HomePage() {
                     className="w-full text-left bg-zinc-900/60 border border-zinc-800 rounded-xl p-3.5 flex items-center gap-3 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900"
                   >
                     <div className="flex-shrink-0 rounded-lg bg-zinc-800 p-2">
-                      <BadgeIcon className="w-3.5 h-3.5 text-zinc-400" />
+                      <BadgeIcon className="w-3.5 h-3.5 text-muted-foreground" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-white truncate">
+                      <p className="text-sm text-foreground truncate">
                         {item.title}
                       </p>
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">
                         {relativeDate(item.date)}
                       </p>
                     </div>
