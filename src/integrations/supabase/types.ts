@@ -79,6 +79,177 @@ export type Database = {
           },
         ]
       }
+      user_profiles: {
+        Row: {
+          id: string
+          email: string
+          full_name: string | null
+          status: string
+          role: string
+          created_at: string
+          approved_at: string | null
+          approved_by: string | null
+        }
+        Insert: {
+          id: string
+          email: string
+          full_name?: string | null
+          status?: string
+          role?: string
+          created_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+        }
+        Update: {
+          id?: string
+          email?: string
+          full_name?: string | null
+          status?: string
+          role?: string
+          created_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+        }
+        Relationships: []
+      }
+      chat_conversations: {
+        Row: {
+          id: string
+          user_id: string
+          title: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string
+          title?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          role: string
+          content: string
+          attachments: Json | null
+          message_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          role: string
+          content: string
+          attachments?: Json | null
+          message_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          role?: string
+          content?: string
+          attachments?: Json | null
+          message_order?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      survey_analyses: {
+        Row: {
+          id: string
+          user_id: string
+          file_name: string
+          total_rows: number
+          context: string | null
+          document: string | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string
+          file_name: string
+          total_rows?: number
+          context?: string | null
+          document?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          file_name?: string
+          total_rows?: number
+          context?: string | null
+          document?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vsl_projects: {
+        Row: {
+          id: string
+          user_id: string
+          project_name: string | null
+          expert_dna_id: string | null
+          audience_dna_id: string | null
+          product_dna_id: string | null
+          instructions: string | null
+          reference_url: string | null
+          reference_text: string | null
+          generated_sections: Json | null
+          chat_messages: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string
+          project_name?: string | null
+          expert_dna_id?: string | null
+          audience_dna_id?: string | null
+          product_dna_id?: string | null
+          instructions?: string | null
+          reference_url?: string | null
+          reference_text?: string | null
+          generated_sections?: Json | null
+          chat_messages?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          project_name?: string | null
+          expert_dna_id?: string | null
+          audience_dna_id?: string | null
+          product_dna_id?: string | null
+          instructions?: string | null
+          reference_url?: string | null
+          reference_text?: string | null
+          generated_sections?: Json | null
+          chat_messages?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       projects: {
         Row: {
           avatar_profile: Json | null
