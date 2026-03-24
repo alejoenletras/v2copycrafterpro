@@ -178,7 +178,7 @@ export default function HomePage() {
         setStats(s => s ?? { dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
         setLoadingStats(false);
       }
-    }, 2000);
+    }, 5000);
     return () => clearTimeout(t);
   }, [loadingStats]);
 
@@ -268,7 +268,7 @@ export default function HomePage() {
         setActivity([]);
         setLoadingActivity(false);
       }
-    }, 2000);
+    }, 5000);
     return () => clearTimeout(t);
   }, [loadingActivity]);
 
