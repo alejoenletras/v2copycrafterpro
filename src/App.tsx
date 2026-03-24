@@ -45,7 +45,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 /** Only accessible by admin users */
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
+  const ADMIN_EMAILS = ['alejoenletras@gmail.com'];
+  const isAdminByEmail = user?.email ? ADMIN_EMAILS.includes(user.email) : false;
 
   if (loading) {
     return (
@@ -55,8 +57,8 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAdmin) {
-    return <Navigate to="/dnas" replace />;
+  if (!isAdmin && !isAdminByEmail) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
