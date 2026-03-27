@@ -12,7 +12,8 @@ export function useVideoInspirations() {
 
   // Query: list all video inspirations
   const { data: inspirations, isLoading, error } = useQuery({
-    queryKey: ['video-inspirations'],
+    queryKey: ['video-inspirations', userId],
+    enabled: !!userId,
     queryFn: async () => {
       try {
         const { data, error } = await supabase

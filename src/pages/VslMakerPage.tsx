@@ -264,6 +264,7 @@ export default function VslMakerPage() {
 
   // ── Fetch projects on mount ──────────────────────────────────────────────
   const fetchProjects = useCallback(async () => {
+    if (!userId) return;
     try {
       const { data, error } = await supabase
         .from('vsl_projects' as any)
@@ -278,7 +279,7 @@ export default function VslMakerPage() {
     } finally {
       setIsLoadingProjects(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 

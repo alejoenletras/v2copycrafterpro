@@ -10,7 +10,8 @@ export function useProjects() {
 
   // Obtener todos los proyectos
   const { data: projects, isLoading, error } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')

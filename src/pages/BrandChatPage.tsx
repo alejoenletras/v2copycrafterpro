@@ -84,7 +84,8 @@ export default function BrandChatPage() {
   const [loadingConversations, setLoadingConversations] = useState(false);
 
   const { data: dnas } = useQuery({
-    queryKey: ['chat-dnas'],
+    queryKey: ['chat-dnas', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data } = await supabase
         .from('dnas')
@@ -100,6 +101,7 @@ export default function BrandChatPage() {
 
   // Fetch conversation list
   const fetchConversations = useCallback(async () => {
+    if (!userId) return;
     setLoadingConversations(true);
     try {
       const { data, error } = await supabase
@@ -114,7 +116,7 @@ export default function BrandChatPage() {
     } finally {
       setLoadingConversations(false);
     }
-  }, []);
+  }, [userId]);
 
   // Load conversations on mount
   useEffect(() => {

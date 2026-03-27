@@ -1,10 +1,10 @@
 import { useAuth } from '@/contexts/AuthContext';
 
 /**
- * Returns the current authenticated user's ID.
- * Falls back to 'default-user' if not authenticated (should not happen in protected routes).
+ * Returns the current authenticated user's ID, or null while the session is loading.
+ * Use the return value with React Query's `enabled` option to prevent queries with a fake ID.
  */
-export function useUserId(): string {
+export function useUserId(): string | null {
   const { user } = useAuth();
-  return user?.id ?? 'default-user';
+  return user?.id ?? null;
 }

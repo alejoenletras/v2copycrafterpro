@@ -11,11 +11,12 @@ export function useDNAs(type?: DNAType) {
 
   const { data: dnas, isLoading, error } = useQuery({
     queryKey: type ? ['dnas', type, userId] : ['dnas', userId],
+    enabled: !!userId,
     queryFn: async () => {
       let query = supabase
         .from('dnas')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', userId!)
         .order('updated_at', { ascending: false });
 
       if (type) {

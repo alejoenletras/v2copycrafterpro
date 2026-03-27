@@ -10,7 +10,8 @@ export function useReferences(category?: ReferenceCategory) {
   const userId = useUserId();
 
   const { data: references, isLoading, error } = useQuery({
-    queryKey: category ? ['references', category] : ['references'],
+    queryKey: category ? ['references', category, userId] : ['references', userId],
+    enabled: !!userId,
     queryFn: async () => {
       let query = supabase
         .from('reference_scripts')

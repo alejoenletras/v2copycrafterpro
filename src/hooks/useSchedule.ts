@@ -29,10 +29,12 @@ export function useSchedule() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!userId) return;
     loadSchedule();
   }, [userId]);
 
   async function loadSchedule() {
+    if (!userId) return;
     setLoading(true);
     try {
       const { data, error } = await supabase

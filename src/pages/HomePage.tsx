@@ -140,12 +140,10 @@ export default function HomePage() {
   /* --- Fetch stats --- */
   useEffect(() => {
     async function fetchStats() {
-      setLoadingStats(true);
-      if (!userId || userId === "default-user") {
-        setStats({ dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
-        setLoadingStats(false);
-        return;
+      if (!userId || !userId) {
+        return; // wait for real userId — don't zero out
       }
+      setLoadingStats(true);
       try {
         const [dnasRes, convsRes, surveysRes, vslRes] = await Promise.all([
           supabase.from("dnas" as any).select("id").eq("user_id", userId),
@@ -185,12 +183,10 @@ export default function HomePage() {
   /* --- Fetch recent activity --- */
   useEffect(() => {
     async function fetchActivity() {
-      setLoadingActivity(true);
-      if (!userId || userId === "default-user") {
-        setActivity([]);
-        setLoadingActivity(false);
-        return;
+      if (!userId || !userId) {
+        return; // wait for real userId — don't zero out
       }
+      setLoadingActivity(true);
       try {
         const [chatsRes, surveysRes, vslRes] = await Promise.all([
           supabase

@@ -129,6 +129,7 @@ export default function SurveyAnalysisPage() {
 
   // ─── Fetch history ────────────────────────────────────────────────────────
   const fetchHistory = useCallback(async () => {
+    if (!userId) return;
     setHistoryLoading(true);
     try {
       const { data, error } = await supabase
@@ -144,7 +145,7 @@ export default function SurveyAnalysisPage() {
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 

@@ -10,7 +10,8 @@ export function useReferents() {
   const userId = useUserId();
 
   const { data: referents, isLoading, error } = useQuery({
-    queryKey: ['referents'],
+    queryKey: ['referents', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('referent_profiles')
