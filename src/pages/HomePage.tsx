@@ -110,9 +110,9 @@ export default function HomePage() {
   const userId = useUserId();
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [loadingActivity, setLoadingActivity] = useState(true);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   /* --- Display name & date --- */
   const fullName =
@@ -169,13 +169,12 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Hard timeout for stats - never skeleton more than 2s
+  // Hard timeout for stats - never skeleton more than 5s after fetch starts
   useEffect(() => {
+    if (!loadingStats) return;
     const t = setTimeout(() => {
-      if (loadingStats) {
-        setStats(s => s ?? { dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
-        setLoadingStats(false);
-      }
+      setStats(s => s ?? { dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
+      setLoadingStats(false);
     }, 5000);
     return () => clearTimeout(t);
   }, [loadingStats]);
@@ -257,13 +256,12 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Hard timeout for activity
+  // Hard timeout for activity - never skeleton more than 5s after fetch starts
   useEffect(() => {
+    if (!loadingActivity) return;
     const t = setTimeout(() => {
-      if (loadingActivity) {
-        setActivity([]);
-        setLoadingActivity(false);
-      }
+      setActivity([]);
+      setLoadingActivity(false);
     }, 5000);
     return () => clearTimeout(t);
   }, [loadingActivity]);
@@ -343,7 +341,7 @@ export default function HomePage() {
               <stat.icon className={`w-[18px] h-[18px] ${stat.color}`} />
             </div>
             <div className="min-w-0">
-              {loadingStats ? (
+              {loadingStats || !stats ? (
                 <div className="h-8 w-10 bg-zinc-800 rounded animate-pulse" />
               ) : (
                 <span className="text-3xl font-bold text-foreground leading-none block">
@@ -393,7 +391,7 @@ export default function HomePage() {
             Actividad reciente
           </h2>
 
-          {loadingActivity ? (
+          {loadingActivity || !stats ? (
             <div className="space-y-3">
               {[1, 2, 3, 4].map((i) => (
                 <div
