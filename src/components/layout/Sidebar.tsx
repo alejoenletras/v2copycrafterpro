@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import {
   Layers, BookOpen, Search, Video, Users, Sparkles, Film,
   FileText, Activity, Zap, Menu, X, BarChart2, MessageSquare,
-  Shield, LogOut,
+  Shield, LogOut, Eye,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
@@ -25,6 +25,7 @@ const NAV_GROUPS = [
       { label: 'Video inspiration', href: '/video-inspiration', icon: Video },
       { label: 'Competencia', href: '/competitors', icon: Users },
       { label: 'Encuestas', href: '/surveys', icon: BarChart2 },
+      { label: 'Ad Spy', href: '/ad-spy', icon: Eye },
     ],
   },
   {

@@ -17,6 +17,7 @@ import ReferentesPage from "./pages/ReferentesPage";
 import ModeledScriptsPage from "./pages/ModeledScriptsPage";
 import SurveyAnalysisPage from "./pages/SurveyAnalysisPage";
 import BrandChatPage from "./pages/BrandChatPage";
+import AdSpyPage from "./pages/AdSpyPage";
 import LoginPage from "./pages/LoginPage";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
@@ -91,6 +92,7 @@ const App = () => (
               <Route path="/scripts" element={<ModeledScriptsPage />} />
               <Route path="/runs" element={<RunsPage />} />
               <Route path="/surveys" element={<SurveyAnalysisPage />} />
+              <Route path="/ad-spy" element={<AdSpyPage />} />
               <Route path="/brand-chat" element={<BrandChatPage />} />
               <Route
                 path="/admin"

@@ -782,3 +782,37 @@ export interface ScrapeRun {
   error_message: string | null;
   apify_cost_usd: number | null;
 }
+
+// ─── Ad Spy Tool ────────────────────────────────────────────────────────────
+
+export type AdSpyStatus = 'pending' | 'running' | 'completed' | 'error';
+export type AdSpyAdType = 'video' | 'image' | 'text';
+
+export interface AdSpyRun {
+  id: string;
+  created_at: string;
+  user_id: string;
+  search_query: string;
+  country_code: string;
+  min_page_likes: number;
+  max_ads: number;
+  status: AdSpyStatus;
+  total_results: number;
+  error_message: string | null;
+  completed_at: string | null;
+}
+
+export interface AdSpyResult {
+  id: string;
+  created_at: string;
+  run_id: string;
+  ad_archive_id: string;
+  page_id: string;
+  page_name: string;
+  page_url: string | null;
+  ad_type: AdSpyAdType;
+  summary: string | null;
+  rewritten_ad_copy: string | null;
+  image_prompt: string | null;
+  video_prompt: string | null;
+}
