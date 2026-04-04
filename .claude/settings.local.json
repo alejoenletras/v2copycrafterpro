@@ -11,7 +11,12 @@
       "Bash(supabase functions list:*)",
       "Bash(supabase status:*)",
       "Bash(supabase login:*)",
-      "Bash(supabase functions deploy:*)"
+      "Bash(supabase functions deploy:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(find /Users/alejandromolinatoro/Downloads/v2copycrafterpro -type f \\\\\\(-name *.env* -o -name supabase.json -o -name *.config.* \\\\\\))"
     ]
   }
 }

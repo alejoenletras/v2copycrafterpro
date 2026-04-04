@@ -139,34 +139,39 @@ export default function HomePage() {
 
   /* --- Fetch stats --- */
   useEffect(() => {
-    async function fetchStats() {
-      if (!userId || !userId) {
-        return; // wait for real userId — don't zero out
-      }
-      setLoadingStats(true);
-      try {
-        const [dnasRes, convsRes, surveysRes, vslRes] = await Promise.all([
-          supabase.from("dnas" as any).select("id").eq("user_id", userId),
-          supabase.from("chat_conversations" as any).select("id").eq("user_id", userId),
-          supabase.from("survey_analyses" as any).select("id").eq("user_id", userId),
-          supabase.from("vsl_projects" as any).select("id").eq("user_id", userId),
-        ]);
+    if (!userId) return;
 
-        setStats({
-          dnas: dnasRes.data?.length ?? 0,
-          conversations: convsRes.data?.length ?? 0,
-          surveys: surveysRes.data?.length ?? 0,
-          vslProjects: vslRes.data?.length ?? 0,
-        });
-      } catch {
+    let cancelled = false;
+    setLoadingStats(true);
+
+    // Ensure the Supabase client has a valid session before querying
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (cancelled || !session) return;
+
+      const [dnasRes, convsRes, surveysRes, vslRes] = await Promise.all([
+        supabase.from("dnas" as any).select("id").eq("user_id", userId),
+        supabase.from("chat_conversations" as any).select("id").eq("user_id", userId),
+        supabase.from("survey_analyses" as any).select("id").eq("user_id", userId),
+        supabase.from("vsl_projects" as any).select("id").eq("user_id", userId),
+      ]);
+
+      if (cancelled) return;
+
+      setStats({
+        dnas: dnasRes.data?.length ?? 0,
+        conversations: convsRes.data?.length ?? 0,
+        surveys: surveysRes.data?.length ?? 0,
+        vslProjects: vslRes.data?.length ?? 0,
+      });
+      setLoadingStats(false);
+    }).catch(() => {
+      if (!cancelled) {
         setStats({ dnas: 0, conversations: 0, surveys: 0, vslProjects: 0 });
-      } finally {
         setLoadingStats(false);
       }
-    }
+    });
 
-    fetchStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
   }, [userId]);
 
   // Hard timeout for stats - never skeleton more than 5s after fetch starts
@@ -181,79 +186,83 @@ export default function HomePage() {
 
   /* --- Fetch recent activity --- */
   useEffect(() => {
-    async function fetchActivity() {
-      if (!userId || !userId) {
-        return; // wait for real userId — don't zero out
-      }
-      setLoadingActivity(true);
-      try {
-        const [chatsRes, surveysRes, vslRes] = await Promise.all([
-          supabase
-            .from("chat_conversations" as any)
-            .select("id, title, updated_at")
-            .eq("user_id", userId)
-            .order("updated_at", { ascending: false })
-            .limit(3),
-          supabase
-            .from("survey_analyses" as any)
-            .select("id, file_name, created_at")
-            .eq("user_id", userId)
-            .order("created_at", { ascending: false })
-            .limit(3),
-          supabase
-            .from("vsl_projects" as any)
-            .select("id, project_name, updated_at")
-            .eq("user_id", userId)
-            .order("updated_at", { ascending: false })
-            .limit(2),
-        ]);
+    if (!userId) return;
 
-        const items: ActivityItem[] = [];
+    let cancelled = false;
+    setLoadingActivity(true);
 
-        ((chatsRes as any).data ?? []).forEach((c: any) => {
-          items.push({
-            id: c.id,
-            title: c.title || "Conversacion sin titulo",
-            type: "Chat",
-            badge: "violet",
-            date: new Date(c.updated_at),
-            to: "/brand-chat",
-          });
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (cancelled || !session) return;
+
+      const [chatsRes, surveysRes, vslRes] = await Promise.all([
+        supabase
+          .from("chat_conversations" as any)
+          .select("id, title, updated_at")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false })
+          .limit(3),
+        supabase
+          .from("survey_analyses" as any)
+          .select("id, file_name, created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(3),
+        supabase
+          .from("vsl_projects" as any)
+          .select("id, project_name, updated_at")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false })
+          .limit(2),
+      ]);
+
+      if (cancelled) return;
+
+      const items: ActivityItem[] = [];
+
+      ((chatsRes as any).data ?? []).forEach((c: any) => {
+        items.push({
+          id: c.id,
+          title: c.title || "Conversacion sin titulo",
+          type: "Chat",
+          badge: "violet",
+          date: new Date(c.updated_at),
+          to: "/brand-chat",
         });
+      });
 
-        ((surveysRes as any).data ?? []).forEach((s: any) => {
-          items.push({
-            id: s.id,
-            title: s.file_name || "Encuesta sin titulo",
-            type: "Encuesta",
-            badge: "emerald",
-            date: new Date(s.created_at),
-            to: "/surveys",
-          });
+      ((surveysRes as any).data ?? []).forEach((s: any) => {
+        items.push({
+          id: s.id,
+          title: s.file_name || "Encuesta sin titulo",
+          type: "Encuesta",
+          badge: "emerald",
+          date: new Date(s.created_at),
+          to: "/surveys",
         });
+      });
 
-        ((vslRes as any).data ?? []).forEach((v: any) => {
-          items.push({
-            id: v.id,
-            title: v.project_name || "Proyecto sin titulo",
-            type: "VSL",
-            badge: "amber",
-            date: new Date(v.updated_at),
-            to: "/vsl",
-          });
+      ((vslRes as any).data ?? []).forEach((v: any) => {
+        items.push({
+          id: v.id,
+          title: v.project_name || "Proyecto sin titulo",
+          type: "VSL",
+          badge: "amber",
+          date: new Date(v.updated_at),
+          to: "/vsl",
         });
+      });
 
-        items.sort((a, b) => b.date.getTime() - a.date.getTime());
-        setActivity(items.slice(0, 8));
-      } catch {
+      items.sort((a, b) => b.date.getTime() - a.date.getTime());
+      setActivity(items.slice(0, 8));
+      setLoadingActivity(false);
+    }).catch(() => {
+      if (!cancelled) {
         setActivity([]);
-      } finally {
         setLoadingActivity(false);
       }
-    }
+    });
 
-    fetchActivity();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
   }, [userId]);
 
   // Hard timeout for activity - never skeleton more than 5s after fetch starts
