@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { DnaReferenteRule } from '@/types';
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
@@ -9,9 +10,11 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 export function useDnaReferenteRules(personalityDnaId?: string) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const { data: rules = [], isLoading } = useQuery({
-    queryKey: ['dna-referente-rules', personalityDnaId],
+    queryKey: ['dna-referente-rules', personalityDnaId, userId],
+    enabled: !!userId,
     queryFn: async () => {
       let q = supabase
         .from('dna_referente_rules')
@@ -24,7 +27,6 @@ export function useDnaReferenteRules(personalityDnaId?: string) {
       if (error) throw error;
       return data as DnaReferenteRule[];
     },
-    enabled: true,
   });
 
   // Generate rules via AI (calls generate-referente-rules edge function)

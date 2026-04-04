@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { Referente } from '@/types';
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
@@ -9,9 +10,11 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 export function useReferentes() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const { data: referentes = [], isLoading, error } = useQuery({
-    queryKey: ['referentes'],
+    queryKey: ['referentes', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('referentes')

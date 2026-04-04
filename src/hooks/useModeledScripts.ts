@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { ModeledScriptV3, ScriptStatus } from '@/types';
 
 interface UseModeledScriptsOptions {
@@ -12,10 +13,12 @@ interface UseModeledScriptsOptions {
 export function useModeledScripts(options: UseModeledScriptsOptions = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
   const { personalityDnaId, runId, status } = options;
 
   const { data: scripts = [], isLoading, error } = useQuery({
-    queryKey: ['modeled-scripts', options],
+    queryKey: ['modeled-scripts', options, userId],
+    enabled: !!userId,
     queryFn: async () => {
       let q = supabase
         .from('modeled_scripts')

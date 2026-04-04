@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase, SUPABASE_KEY } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { CompetitorProfile } from '@/types';
 
 const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
@@ -9,10 +10,12 @@ const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 export function useCompetitors() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
   const [isTriggering, setIsTriggering] = useState(false);
 
   const { data: competitors, isLoading, error } = useQuery({
-    queryKey: ['competitors'],
+    queryKey: ['competitors', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('competitor_profiles')

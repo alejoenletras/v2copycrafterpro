@@ -2,16 +2,19 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase, SUPABASE_KEY } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { OrganicPost } from '@/types';
 
 const BASE_URL = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
 
 export function useOrganicPosts(competitorId?: string) {
   const { toast } = useToast();
+  const userId = useUserId();
   const [isTriggering, setIsTriggering] = useState(false);
 
   const { data: posts, isLoading, error } = useQuery({
-    queryKey: competitorId ? ['organic-posts', competitorId] : ['organic-posts'],
+    queryKey: competitorId ? ['organic-posts', competitorId, userId] : ['organic-posts', userId],
+    enabled: !!userId,
     queryFn: async () => {
       let query = (supabase as any)
         .from('organic_posts')

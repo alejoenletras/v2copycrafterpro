@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useUserId } from '@/hooks/useUserId';
 import type { ReferenteContent } from '@/types';
 
 interface UseReferenteContentOptions {
@@ -12,9 +13,11 @@ interface UseReferenteContentOptions {
 
 export function useReferenteContent(options: UseReferenteContentOptions = {}) {
   const { referenteId, platform, contentType, minQuality, isUsed } = options;
+  const userId = useUserId();
 
   const { data: content = [], isLoading, error } = useQuery({
-    queryKey: ['referente-content', options],
+    queryKey: ['referente-content', options, userId],
+    enabled: !!userId,
     queryFn: async () => {
       let q = supabase
         .from('referente_content')

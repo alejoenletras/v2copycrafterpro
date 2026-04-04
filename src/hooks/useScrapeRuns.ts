@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useUserId } from '@/hooks/useUserId';
 import type { ScrapeRun } from '@/types';
 
 export function useScrapeRuns() {
+  const userId = useUserId();
+
   const { data: runs, isLoading, error } = useQuery({
-    queryKey: ['scrape-runs'],
+    queryKey: ['scrape-runs', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('scrape_runs')

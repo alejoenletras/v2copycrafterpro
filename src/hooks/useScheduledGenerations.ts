@@ -1,14 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useUserId } from '@/hooks/useUserId';
 import type { ScheduledGeneration } from '@/types';
 
 export function useScheduledGenerations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = useUserId();
 
   const { data: schedules = [], isLoading } = useQuery({
-    queryKey: ['scheduled-generations'],
+    queryKey: ['scheduled-generations', userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('scheduled_generations')

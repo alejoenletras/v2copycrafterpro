@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { queryClient } from '@/lib/queryClient';
 
 export interface UserProfile {
   id: string;
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for future auth changes (sign-in, sign-out, token refresh).
     // Do NOT call done() here — initial load is handled by getSession above.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return;
         const u = session?.user ?? null;
         setUser(u);
@@ -96,6 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchProfile(u.id);
         } else {
           setProfile(null);
+        }
+
+        // After a token refresh, invalidate all React Query caches so they
+        // re-fetch with the fresh token instead of staying in an error state.
+        if (event === 'TOKEN_REFRESHED') {
+          queryClient.invalidateQueries();
         }
       }
     );

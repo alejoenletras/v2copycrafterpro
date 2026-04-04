@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useUserId } from '@/hooks/useUserId';
 import type { GenerationRun } from '@/types';
 
 export function useGenerationRuns(personalityDnaId?: string) {
+  const userId = useUserId();
+
   const { data: runs = [], isLoading } = useQuery({
-    queryKey: ['generation-runs', personalityDnaId],
+    queryKey: ['generation-runs', personalityDnaId, userId],
+    enabled: !!userId,
     queryFn: async () => {
       let q = supabase
         .from('generation_runs')

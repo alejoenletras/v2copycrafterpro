@@ -31,6 +31,7 @@ export default function AdminPage() {
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['admin-users'],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('user_profiles' as any)
