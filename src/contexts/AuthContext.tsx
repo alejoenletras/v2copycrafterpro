@@ -74,6 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await Promise.race([fetch, timeout]);
     };
 
+    // getSession() refreshes the token if expired — only mark loading
+    // done here so that ProtectedRoute waits for a valid token.
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;
       if (session?.user) {
@@ -83,7 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       done();
     }).catch(() => done());
 
-    // Listen for future changes
+    // Listen for future auth changes (sign-in, sign-out, token refresh).
+    // Do NOT call done() here — initial load is handled by getSession above.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!mounted) return;
@@ -94,7 +97,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
         }
-        done();
       }
     );
 
