@@ -22,6 +22,7 @@ import LoginPage from "./pages/LoginPage";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
+import ClearCachePopup from "@/components/ClearCachePopup";
 
 import { queryClient } from "@/lib/queryClient";
 
@@ -70,6 +71,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <ClearCachePopup />
       <BrowserRouter>
         <AuthProvider>
           <Routes>
