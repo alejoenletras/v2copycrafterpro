@@ -27,16 +27,22 @@ interface Conversation {
   updated_at: string;
 }
 
-const WELCOME_MESSAGE =
-  'Soy el asistente de copy de SaleADS. Pídeme cualquier pieza: un email, un WhatsApp, una descripción de YouTube, un caption, una respuesta a objeción, un texto de landing... lo que necesites, en la voz de SaleADS.\n\nPuedes adjuntar documentos (PDF, TXT, CSV) e imágenes para darme más contexto.';
+type Voice = 'saleads' | 'marco';
 
-const QUICK_STARTS = [
-  'Email de bienvenida',
-  'WhatsApp de venta',
-  'Descripción de YouTube',
-  'Caption para Instagram',
-  'Respuesta a objeción',
-];
+const VOICE_CONFIG: Record<Voice, { label: string; description: string; welcome: string; quickStarts: string[] }> = {
+  saleads: {
+    label: 'SaleADS',
+    description: 'Voz corporativa de SaleADS',
+    welcome: 'Soy el asistente de copy de SaleADS. Pídeme cualquier pieza: un email, un WhatsApp, una descripción de YouTube, un caption, una respuesta a objeción, un texto de landing... lo que necesites, en la voz de SaleADS.\n\nPuedes adjuntar documentos (PDF, TXT, CSV) e imágenes para darme más contexto.',
+    quickStarts: ['Email de bienvenida', 'WhatsApp de venta', 'Descripción de YouTube', 'Caption para Instagram', 'Respuesta a objeción'],
+  },
+  marco: {
+    label: 'Marco Lezama',
+    description: 'Voz de Marco — diagnóstico y estrategia',
+    welcome: 'Soy el asistente de copy en la voz de Marco Lezama. Pídeme cualquier pieza: un VSL, un email, un WhatsApp, un caption, un título de video, una respuesta a objeción... lo que necesites, con el tono diagnóstico y directo de Marco.\n\nPuedes adjuntar documentos (PDF, TXT, CSV) e imágenes para darme más contexto.',
+    quickStarts: ['Título de YouTube', 'Email de diagnóstico', 'WhatsApp para empresario', 'Caption de Instagram', 'Respuesta a objeción'],
+  },
+};
 
 const ACCEPTED_TYPES = '.pdf,.txt,.csv,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp';
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -69,8 +75,9 @@ export default function BrandChatPage() {
   const { toast } = useToast();
   const userId = useUserId();
   const scopeIds = useDataScope();
+  const [voice, setVoice] = useState<Voice>('saleads');
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: WELCOME_MESSAGE },
+    { role: 'assistant', content: VOICE_CONFIG.saleads.welcome },
   ]);
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -171,7 +178,16 @@ export default function BrandChatPage() {
   // Start new conversation
   const startNewConversation = () => {
     setConversationId(null);
-    setMessages([{ role: 'assistant', content: WELCOME_MESSAGE }]);
+    setMessages([{ role: 'assistant', content: VOICE_CONFIG[voice].welcome }]);
+    setInput('');
+    setAttachments([]);
+  };
+
+  // Change voice — resets conversation
+  const handleVoiceChange = (newVoice: Voice) => {
+    setVoice(newVoice);
+    setConversationId(null);
+    setMessages([{ role: 'assistant', content: VOICE_CONFIG[newVoice].welcome }]);
     setInput('');
     setAttachments([]);
   };
@@ -308,7 +324,7 @@ export default function BrandChatPage() {
           'Authorization': `Bearer ${key}`,
           'apikey': key,
         },
-        body: JSON.stringify({ messages: payload, dnas }),
+        body: JSON.stringify({ messages: payload, dnas, voice }),
       });
 
       const data = await res.json();
@@ -471,8 +487,23 @@ export default function BrandChatPage() {
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat de Marca</h1>
             <p className="text-xs text-muted-foreground">
-              Genera copy en la voz de tu marca
+              {VOICE_CONFIG[voice].description}
             </p>
+          </div>
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+            {(Object.keys(VOICE_CONFIG) as Voice[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => handleVoiceChange(v)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  voice === v
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                {VOICE_CONFIG[v].label}
+              </button>
+            ))}
           </div>
           {messages.length > 1 && (
             <button
@@ -554,7 +585,7 @@ export default function BrandChatPage() {
         {/* Quick-start buttons */}
         {messages.length === 1 && (
           <div className="px-4 pb-2 flex flex-wrap gap-2 max-w-3xl mx-auto w-full">
-            {QUICK_STARTS.map((label) => (
+            {VOICE_CONFIG[voice].quickStarts.map((label) => (
               <button
                 key={label}
                 onClick={() => sendMessage(label)}
