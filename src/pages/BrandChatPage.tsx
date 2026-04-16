@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Send, Copy, Check, MessageSquare, Loader2, Paperclip, X, FileText, Image as ImageIcon, Plus, Trash2, PanelLeftClose, PanelLeft, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserId } from '@/hooks/useUserId';
+import { useDataScope } from '@/hooks/useDataScope';
 
 interface Attachment {
   name: string;
@@ -67,6 +68,7 @@ function formatDate(dateStr: string): string {
 export default function BrandChatPage() {
   const { toast } = useToast();
   const userId = useUserId();
+  const scopeIds = useDataScope();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: WELCOME_MESSAGE },
   ]);
@@ -84,30 +86,36 @@ export default function BrandChatPage() {
   const [loadingConversations, setLoadingConversations] = useState(false);
 
   const { data: dnas } = useQuery({
-    queryKey: ['chat-dnas', userId],
-    enabled: !!userId,
+    queryKey: ['chat-dnas', scopeIds],
+    enabled: !!userId && !!scopeIds && scopeIds.length > 0,
     queryFn: async () => {
       const { data } = await supabase
         .from('dnas')
-        .select('type, data')
-        .in('type', ['expert', 'audience', 'product']);
+        .select('type, data, user_id, is_default, updated_at')
+        .in('type', ['expert', 'audience', 'product'])
+        .in('user_id', scopeIds!)
+        .order('is_default', { ascending: false })
+        .order('updated_at', { ascending: false });
+      // Pick one per type: default first, then most recent.
       const result: Record<string, string> = {};
       for (const d of data || []) {
-        result[d.type] = typeof d.data === 'string' ? d.data : JSON.stringify(d.data);
+        if (!result[d.type]) {
+          result[d.type] = typeof d.data === 'string' ? d.data : JSON.stringify(d.data);
+        }
       }
       return result;
     },
   });
 
-  // Fetch conversation list
+  // Fetch conversation list (admins see the whole admin pool)
   const fetchConversations = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !scopeIds || scopeIds.length === 0) return;
     setLoadingConversations(true);
     try {
       const { data, error } = await supabase
         .from('chat_conversations' as any)
         .select('*')
-        .eq('user_id', userId)
+        .in('user_id', scopeIds)
         .order('updated_at', { ascending: false });
       if (error) throw error;
       setConversations(data || []);
@@ -116,7 +124,7 @@ export default function BrandChatPage() {
     } finally {
       setLoadingConversations(false);
     }
-  }, [userId]);
+  }, [userId, scopeIds]);
 
   // Load conversations on mount
   useEffect(() => {
@@ -291,12 +299,20 @@ export default function BrandChatPage() {
         })),
       }));
 
-      const { data, error } = await supabase.functions.invoke('brand-chat', {
-        body: { messages: payload, dnas },
+      const baseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+      const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const res = await fetch(`${baseUrl}/functions/v1/brand-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+          'apikey': key,
+        },
+        body: JSON.stringify({ messages: payload, dnas }),
       });
 
-      if (error) throw error;
-
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
       const reply = data?.reply || data?.content || 'Sin respuesta.';
       const assistantMsg: ChatMessage = { role: 'assistant', content: reply };
       setMessages((prev) => [...prev, assistantMsg]);
