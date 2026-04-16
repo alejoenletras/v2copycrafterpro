@@ -159,9 +159,9 @@ export default function BrandChatPage() {
           content: m.content,
           attachments: m.attachments || undefined,
         }));
-        setMessages([{ role: 'assistant', content: WELCOME_MESSAGE }, ...loaded]);
+        setMessages([{ role: 'assistant', content: VOICE_CONFIG[voice].welcome }, ...loaded]);
       } else {
-        setMessages([{ role: 'assistant', content: WELCOME_MESSAGE }]);
+        setMessages([{ role: 'assistant', content: VOICE_CONFIG[voice].welcome }]);
       }
       setConversationId(convId);
       setInput('');
