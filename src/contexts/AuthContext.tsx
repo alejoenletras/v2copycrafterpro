@@ -20,6 +20,13 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isApproved: boolean;
+  /**
+   * IDs to use when filtering user-scoped tables on READ.
+   * - For admins: list of every admin's user_id (shared "brand team" data pool).
+   * - For regular users: [currentUserId].
+   * - Empty while loading / signed out.
+   */
+  scopeIds: string[];
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -28,10 +35,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Fallback admin emails (mirrors Sidebar/AdminRoute). Used only if profile fetch fails
+// so a known admin still gets the admin data scope.
+const FALLBACK_ADMIN_EMAILS = ['alejoenletras@gmail.com'];
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [adminIds, setAdminIds] = useState<string[]>([]);
 
   const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
@@ -46,6 +58,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       setProfile(null);
       return null;
+    }
+  }, []);
+
+  // Load the list of admin user_ids so admins share the same data pool.
+  // Runs once per sign-in. RLS on user_profiles allows admins to read all profiles.
+  const fetchAdminIds = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles' as any)
+        .select('id')
+        .eq('role', 'admin');
+      if (error) throw error;
+      const ids = ((data as any[]) ?? []).map((r) => r.id as string);
+      setAdminIds(ids);
+    } catch {
+      setAdminIds([]);
     }
   }, []);
 
@@ -114,6 +142,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchProfile]);
 
+  // Whenever the current user becomes admin, load the admin pool so scopeIds
+  // covers every admin. Regular users don't need it.
+  useEffect(() => {
+    if (profile?.role === 'admin') {
+      fetchAdminIds();
+    } else {
+      setAdminIds([]);
+    }
+  }, [profile?.role, fetchAdminIds]);
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -134,14 +172,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
+  const isAdmin =
+    profile?.role === 'admin' ||
+    (user?.email ? FALLBACK_ADMIN_EMAILS.includes(user.email) : false);
+
+  // Build the read scope:
+  // - Admin with known pool → all admin ids (dedup-safe includes self if present).
+  // - Admin but pool still loading → fall back to self so the UI isn't empty.
+  // - Regular user → [self].
+  // - Signed out → [].
+  const scopeIds: string[] = user
+    ? isAdmin
+      ? adminIds.length > 0
+        ? adminIds.includes(user.id)
+          ? adminIds
+          : [...adminIds, user.id]
+        : [user.id]
+      : [user.id]
+    : [];
+
   return (
     <AuthContext.Provider
       value={{
         user,
         profile,
         loading,
-        isAdmin: profile?.role === 'admin',
+        isAdmin,
         isApproved: profile?.status === 'approved',
+        scopeIds,
         signIn,
         signUp,
         signOut,
