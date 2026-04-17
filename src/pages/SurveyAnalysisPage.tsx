@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useUserId } from '@/hooks/useUserId';
+import { useDataScope } from '@/hooks/useDataScope';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SurveyAnalysisRecord {
@@ -112,6 +113,7 @@ function renderMarkdown(md: string): string {
 export default function SurveyAnalysisPage() {
   const { toast } = useToast();
   const userId = useUserId();
+  const scopeIds = useDataScope();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [fileName, setFileName] = useState('');
@@ -129,13 +131,13 @@ export default function SurveyAnalysisPage() {
 
   // ─── Fetch history ────────────────────────────────────────────────────────
   const fetchHistory = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !scopeIds || scopeIds.length === 0) return;
     setHistoryLoading(true);
     try {
       const { data, error } = await supabase
         .from('survey_analyses' as any)
         .select('id, file_name, total_rows, context, document, status, created_at')
-        .eq('user_id', userId)
+        .in('user_id', scopeIds)
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;
@@ -145,7 +147,7 @@ export default function SurveyAnalysisPage() {
     } finally {
       setHistoryLoading(false);
     }
-  }, [userId]);
+  }, [userId, scopeIds]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 

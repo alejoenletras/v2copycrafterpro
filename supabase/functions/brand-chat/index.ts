@@ -52,14 +52,30 @@ Deno.serve(async (req) => {
     // Log mínimo para debug (sin contenido del mensaje ni de los DNAs por privacidad).
     console.log(`[brand-chat] voice=${voice} messages=${messages?.length ?? 0} has_dnas=${!!dnas}`);
 
-    // Build system prompt: brand guide + optional DNAs
-    let systemPrompt = VOICE_TO_PROMPT[voice];
+    // Build system prompt: brand guide + optional DNAs, as cacheable blocks
+    type SystemBlock = {
+      type: "text";
+      text: string;
+      cache_control?: { type: "ephemeral" };
+    };
+    const systemBlocks: SystemBlock[] = [
+      {
+        type: "text",
+        text: VOICE_TO_PROMPT[voice],
+        cache_control: { type: "ephemeral" },
+      },
+    ];
 
     if (dnas) {
-      systemPrompt += `\n\n═══════════════════════════════════════════════════\nDNAs DEL USUARIO (contexto adicional de marca)\n═══════════════════════════════════════════════════\n`;
-      if (dnas.expert) systemPrompt += `\nDNA EXPERTO:\n${dnas.expert}`;
-      if (dnas.audience) systemPrompt += `\nDNA AUDIENCIA:\n${dnas.audience}`;
-      if (dnas.product) systemPrompt += `\nDNA PRODUCTO:\n${dnas.product}`;
+      let dnaText = `\n\n═══════════════════════════════════════════════════\nDNAs DEL USUARIO (contexto adicional de marca)\n═══════════════════════════════════════════════════\n`;
+      if (dnas.expert) dnaText += `\nDNA EXPERTO:\n${dnas.expert}`;
+      if (dnas.audience) dnaText += `\nDNA AUDIENCIA:\n${dnas.audience}`;
+      if (dnas.product) dnaText += `\nDNA PRODUCTO:\n${dnas.product}`;
+      systemBlocks.push({
+        type: "text",
+        text: dnaText,
+        cache_control: { type: "ephemeral" },
+      });
     }
 
     // Build messages with multimodal content (images, PDFs, text files)
@@ -144,9 +160,9 @@ Deno.serve(async (req) => {
       "x-api-key": ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
     };
-    if (hasPdfs) {
-      headers["anthropic-beta"] = "pdfs-2024-09-25";
-    }
+    const betaFeatures: string[] = ["prompt-caching-2024-07-31"];
+    if (hasPdfs) betaFeatures.push("pdfs-2024-09-25");
+    headers["anthropic-beta"] = betaFeatures.join(",");
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -154,17 +170,29 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "claude-opus-4-6",
         max_tokens: 4096,
-        system: systemPrompt,
+        system: systemBlocks,
         messages: apiMessages,
       }),
     });
 
     const data = await response.json();
-    if (data.error)
+    if (data.error) {
+      console.error("[brand-chat] Anthropic API error:", JSON.stringify(data.error));
       throw new Error(data.error.message || JSON.stringify(data.error));
+    }
+
+    if (data.usage) {
+      console.log(
+        `[brand-chat] usage voice=${voice} ` +
+        `input=${data.usage.input_tokens ?? 0} ` +
+        `output=${data.usage.output_tokens ?? 0} ` +
+        `cache_write=${data.usage.cache_creation_input_tokens ?? 0} ` +
+        `cache_read=${data.usage.cache_read_input_tokens ?? 0}`
+      );
+    }
 
     const reply = data.content?.[0]?.text || "";
-    return new Response(JSON.stringify({ reply }), {
+    return new Response(JSON.stringify({ reply, usage: data.usage ?? null }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: unknown) {

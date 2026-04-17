@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useUserId } from '@/hooks/useUserId';
+import { useDataScope } from '@/hooks/useDataScope';
 import type { DNAType } from '@/types';
 
 // ─── Chat message type (moved up for VslProject reference) ────────────────
@@ -224,6 +225,7 @@ export default function VslMakerPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const userId = useUserId();
+  const scopeIds = useDataScope();
   const { dnas, isLoading: dnasLoading } = useDNAs();
 
   // Shared state
@@ -264,12 +266,12 @@ export default function VslMakerPage() {
 
   // ── Fetch projects on mount ──────────────────────────────────────────────
   const fetchProjects = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !scopeIds || scopeIds.length === 0) return;
     try {
       const { data, error } = await supabase
         .from('vsl_projects' as any)
         .select('*')
-        .eq('user_id', userId)
+        .in('user_id', scopeIds)
         .order('updated_at', { ascending: false })
         .limit(20);
       if (error) throw error;
@@ -279,7 +281,7 @@ export default function VslMakerPage() {
     } finally {
       setIsLoadingProjects(false);
     }
-  }, [userId]);
+  }, [userId, scopeIds]);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 

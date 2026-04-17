@@ -1,7 +1,7 @@
 /**
  * improve-dna-field edge function
  *
- * Generates or improves a single DNA field using Claude Haiku.
+ * Generates or improves a single DNA field using Claude Opus.
  * Uses other already-filled fields of the same DNA as context.
  *
  * POST body: {

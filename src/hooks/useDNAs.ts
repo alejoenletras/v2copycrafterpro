@@ -2,21 +2,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { useUserId } from '@/hooks/useUserId';
+import { useDataScope } from '@/hooks/useDataScope';
 import type { DNAType } from '@/types';
 
 export function useDNAs(type?: DNAType) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const userId = useUserId();
+  const scopeIds = useDataScope();
 
   const { data: dnas, isLoading, error } = useQuery({
-    queryKey: type ? ['dnas', type, userId] : ['dnas', userId],
-    enabled: !!userId,
+    queryKey: type ? ['dnas', type, scopeIds] : ['dnas', scopeIds],
+    enabled: !!userId && !!scopeIds && scopeIds.length > 0,
     queryFn: async () => {
       let query = supabase
         .from('dnas')
         .select('*')
-        .eq('user_id', userId!)
+        .in('user_id', scopeIds!)
         .order('updated_at', { ascending: false });
 
       if (type) {
@@ -95,12 +97,14 @@ export function useDNAs(type?: DNAType) {
 
   const setDefault = useMutation({
     mutationFn: async ({ id, dnaType }: { id: string; dnaType: DNAType }) => {
-      // Clear current default for this type
+      // Clear current default for this type across the entire read scope
+      // (for admins: all admins; for users: self). This keeps a single
+      // default even when admins share the same DNA pool.
       await supabase
         .from('dnas')
         .update({ is_default: false })
         .eq('type', dnaType)
-        .eq('user_id', userId);
+        .in('user_id', scopeIds ?? [userId!]);
 
       // Set new default
       const { data, error } = await supabase

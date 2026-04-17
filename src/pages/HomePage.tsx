@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserId } from "@/hooks/useUserId";
+import { useDataScope } from "@/hooks/useDataScope";
 import { supabase } from "@/lib/supabase";
 import {
   Brain,
@@ -108,6 +109,7 @@ const badgeIcons: Record<string, typeof MessageSquare> = {
 export default function HomePage() {
   const { user, profile } = useAuth();
   const userId = useUserId();
+  const scopeIds = useDataScope();
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -139,7 +141,7 @@ export default function HomePage() {
 
   /* --- Fetch stats --- */
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !scopeIds || scopeIds.length === 0) return;
 
     let cancelled = false;
     setLoadingStats(true);
@@ -149,10 +151,10 @@ export default function HomePage() {
       if (cancelled || !session) return;
 
       const [dnasRes, convsRes, surveysRes, vslRes] = await Promise.all([
-        supabase.from("dnas" as any).select("id").eq("user_id", userId),
-        supabase.from("chat_conversations" as any).select("id").eq("user_id", userId),
-        supabase.from("survey_analyses" as any).select("id").eq("user_id", userId),
-        supabase.from("vsl_projects" as any).select("id").eq("user_id", userId),
+        supabase.from("dnas" as any).select("id").in("user_id", scopeIds),
+        supabase.from("chat_conversations" as any).select("id").in("user_id", scopeIds),
+        supabase.from("survey_analyses" as any).select("id").in("user_id", scopeIds),
+        supabase.from("vsl_projects" as any).select("id").in("user_id", scopeIds),
       ]);
 
       if (cancelled) return;
@@ -172,7 +174,7 @@ export default function HomePage() {
     });
 
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, scopeIds]);
 
   // Hard timeout for stats - never skeleton more than 5s after fetch starts
   useEffect(() => {
@@ -186,7 +188,7 @@ export default function HomePage() {
 
   /* --- Fetch recent activity --- */
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !scopeIds || scopeIds.length === 0) return;
 
     let cancelled = false;
     setLoadingActivity(true);
@@ -198,19 +200,19 @@ export default function HomePage() {
         supabase
           .from("chat_conversations" as any)
           .select("id, title, updated_at")
-          .eq("user_id", userId)
+          .in("user_id", scopeIds)
           .order("updated_at", { ascending: false })
           .limit(3),
         supabase
           .from("survey_analyses" as any)
           .select("id, file_name, created_at")
-          .eq("user_id", userId)
+          .in("user_id", scopeIds)
           .order("created_at", { ascending: false })
           .limit(3),
         supabase
           .from("vsl_projects" as any)
           .select("id, project_name, updated_at")
-          .eq("user_id", userId)
+          .in("user_id", scopeIds)
           .order("updated_at", { ascending: false })
           .limit(2),
       ]);
@@ -263,7 +265,7 @@ export default function HomePage() {
     });
 
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, scopeIds]);
 
   // Hard timeout for activity - never skeleton more than 5s after fetch starts
   useEffect(() => {
